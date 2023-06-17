@@ -2,11 +2,13 @@ import os
 import json
 import music21 as m21
 import numpy as np
-import tensorflow as tf
+#import tensorflow as tf
 
-KERN_DATASET_PATH = "musicxml"
+RAW_DATA_PATH = "rawdata"
 SAVE_DIR = "dataset"
-SINGLE_FILE_DATASET = "file_dataset"
+SINGLE_SONGS_FILE_DATASET = "file_song_dataset"
+SINGLE_LYRICS_FILE_DATASET = "file_lyrics_dataset"
+
 MAPPING_PATH = "mapping.json"
 SEQUENCE_LENGTH = 64  # 64
 ACCEPTABLE_DURATIONS = [
@@ -19,6 +21,34 @@ ACCEPTABLE_DURATIONS = [
     3,
     4
 ]
+
+
+def preprocess(dataset_path):
+    pass
+
+    # load the songs
+    print("Loading songs...")
+    songs = load_songs(dataset_path)
+    print(f"Loaded {len(songs)} songs.")
+
+    for i, song in enumerate(songs):
+
+        # filter out songs
+        if not has_acceptable_duration(song, ACCEPTABLE_DURATIONS):
+            continue
+
+        song = transpose(song)
+
+        # encode songs with music time series representation
+        encoded_song = encode_song(song)
+        encoded_lyrics = encode_lyrics(song)
+
+        # save songs to a text file
+        save_path = os.path.join(SAVE_DIR, str(i))
+        with open(save_path, "w") as fp:
+            fp.write(encoded_song)
+            fp.write("\n")
+            fp.write(encoded_lyrics)
 
 
 def load_songs(dataset_path):
@@ -115,31 +145,32 @@ def encode_lyrics(song, time_step=0.25):
     return encoded_lyrics
 
 
-def load(file_path):
-    with open(file_path, "r") as fp:
-        song = fp.read()
-    return song
-
-
-def create_single_file_dataset(dataset_path, file_dataset_path, sequence_length):
+def create_single_file_datasets(dataset_path, song_single_dataset_path, lyric_single_dataset_path, sequence_length):
     # Every input of LSTM must be of the same length
     new_song_delimiter = "/ " * sequence_length
-    songs = ""
+    all_songs = ""
+    all_lyrics = ""
 
-    # load encoded songs and add delimiters
+    # load encoded songs and lyrics + add delimiters
     for path, _, files in os.walk(dataset_path):
         for file in files:
-            file_path = os.path.join(path, file)
-            song = load(file_path)
-            songs = songs + song + " " + new_song_delimiter
+            with open(os.path.join(path, file), "r") as fp:
+                song = fp.readline().strip()
+                lyrics = fp.readline().strip()
+            all_songs = all_songs + song + " " + new_song_delimiter
+            all_lyrics = all_lyrics + lyrics + " " + new_song_delimiter
 
     # remove last space
-    songs = songs[:-1]
+    all_songs = all_songs[:-1]
+    all_lyrics = all_lyrics[:-1]
 
-    with open(file_dataset_path, "w") as fp:
-        fp.write(songs)
+    with open(song_single_dataset_path, "w") as fp:
+        fp.write(all_songs)
 
-    return songs
+    with open(lyric_single_dataset_path, "w") as fp:
+        fp.write(all_lyrics)
+
+    return all_songs, all_lyrics
 
 
 def create_mapping(songs, mapping_path):
@@ -181,8 +212,8 @@ def convert_songs_to_int(songs):
 def generating_training_sequences(sequence_length):
     # Give the network 4 bars of notes (64 time steps), and ask it to predict the next one
 
-    # load songs
-    songs = load(SINGLE_FILE_DATASET)
+    # TODO: load songs
+    songs = ""  # load(SINGLE_FILE_DATASET)
     int_songs = convert_songs_to_int(songs)
 
     inputs = []
@@ -197,46 +228,20 @@ def generating_training_sequences(sequence_length):
     # one-hot encoding
     # input shape: (# of sequences, sequence length) -> (# of sequences, sequence length, vocabulary size)
     vocabulary_size = len(set(int_songs))
-    inputs = tf.keras.utils.to_categorical(inputs, num_classes=vocabulary_size)
+    # inputs = tf.keras.utils.to_categorical(inputs, num_classes=vocabulary_size)
     targets = np.array(targets)
 
     return inputs, targets
 
 
 def main():
-    preprocess(KERN_DATASET_PATH)
+    preprocess(RAW_DATA_PATH)
+    songs, lyrics = create_single_file_datasets(SAVE_DIR, SINGLE_SONGS_FILE_DATASET,
+                                                SINGLE_LYRICS_FILE_DATASET, SEQUENCE_LENGTH)
+    create_mapping(songs, MAPPING_PATH)
+
     # TODO: Adapt these lines of code
-    # songs = create_single_file_dataset(SAVE_DIR, SINGLE_FILE_DATASET, SEQUENCE_LENGTH)
-    # create_mapping(songs, MAPPING_PATH)
     # inputs, targets = generating_training_sequences(SEQUENCE_LENGTH)
-
-
-def preprocess(dataset_path):
-    pass
-
-    # load the songs
-    print("Loading songs...")
-    songs = load_songs(dataset_path)
-    print(f"Loaded {len(songs)} songs.")
-
-    for i, song in enumerate(songs):
-
-        # filter out songs
-        if not has_acceptable_duration(song, ACCEPTABLE_DURATIONS):
-            continue
-
-        song = transpose(song)
-
-        # encode songs with music time series representation
-        encoded_song = encode_song(song)
-        encoded_lyrics = encode_lyrics(song)
-
-        # save songs to a text file
-        save_path = os.path.join(SAVE_DIR, str(i))
-        with open(save_path, "w") as fp:
-            fp.write(encoded_song)
-            fp.write("\n")
-            fp.write(encoded_lyrics)
 
 
 if __name__ == "__main__":
