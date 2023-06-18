@@ -2,7 +2,7 @@ import os
 import json
 import music21 as m21
 import numpy as np
-#import tensorflow as tf
+import tensorflow as tf
 
 RAW_DATA_PATH = "rawdata"
 SAVE_DIR = "dataset"
@@ -192,6 +192,41 @@ def create_mapping(songs, mapping_path):
         json.dump(mappings, fp, indent=4)
 
 
+def generating_training_sequences(sequence_length):
+    # Give the network 4 bars of notes (64 time steps) and 4 bar of tones, with the tone that the target has
+
+    with open(SINGLE_SONGS_FILE_DATASET, "r") as fp:
+        songs = fp.read()
+
+    with open(SINGLE_LYRICS_FILE_DATASET, "r") as fp:
+        lyrics = fp.read()
+
+    int_songs = convert_songs_to_int(songs)  # Map the songs to int
+
+    inputs_songs = []
+    inputs_lyrics = []
+    targets = []
+
+    # generate the training sequences (e.g. 100 notes -> 36 training samples)
+    num_sequences = len(int_songs) - sequence_length
+    for i in range(num_sequences):
+        inputs_songs.append(int_songs[i:i + sequence_length])
+        inputs_lyrics.append(lyrics[i:i + sequence_length])
+        targets.append(int_songs[i + sequence_length - 1])
+
+    for sublist in inputs_songs:
+        sublist[-1] = 0  # Set the last element of every note sequence to 0 (It's the prediction lol)
+
+    # one-hot encoding
+    # input shape: (# of sequences, sequence length) -> (# of sequences, sequence length, vocabulary size)
+    inputs_songs = tf.keras.utils.to_categorical(inputs_songs, num_classes=len(set(int_songs)))
+    inputs_songs = tf.keras.utils.to_categorical(inputs_songs, num_classes=5)  # 5 pitches
+
+    targets = np.array(targets)
+
+    return inputs_songs, inputs_lyrics, targets
+
+
 def convert_songs_to_int(songs):
     int_songs = []
 
@@ -207,31 +242,6 @@ def convert_songs_to_int(songs):
         int_songs.append(mappings[symbol])
 
     return int_songs
-
-
-def generating_training_sequences(sequence_length):
-    # Give the network 4 bars of notes (64 time steps), and ask it to predict the next one
-
-    # TODO: load songs
-    songs = ""  # load(SINGLE_FILE_DATASET)
-    int_songs = convert_songs_to_int(songs)
-
-    inputs = []
-    targets = []
-
-    # generate the training sequences (e.g. 100 notes -> 36 training samples)
-    num_sequences = len(int_songs) - sequence_length
-    for i in range(num_sequences):
-        inputs.append(int_songs[i:i + sequence_length])
-        targets.append(int_songs[i + sequence_length])
-
-    # one-hot encoding
-    # input shape: (# of sequences, sequence length) -> (# of sequences, sequence length, vocabulary size)
-    vocabulary_size = len(set(int_songs))
-    # inputs = tf.keras.utils.to_categorical(inputs, num_classes=vocabulary_size)
-    targets = np.array(targets)
-
-    return inputs, targets
 
 
 def main():
