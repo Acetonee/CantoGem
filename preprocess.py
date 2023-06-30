@@ -3,6 +3,7 @@ import json
 import music21 as m21
 import numpy as np
 import tensorflow as tf
+import pycantonese as pc
 
 RAW_DATA_PATH = "rawdata"
 SAVE_DIR = "dataset"
@@ -10,7 +11,11 @@ SINGLE_SONGS_FILE_DATASET = "file_song_dataset"
 SINGLE_LYRICS_FILE_DATASET = "file_lyrics_dataset"
 
 MAPPING_PATH = "mapping.json"
-SEQUENCE_LENGTH = 64  # 64
+SEQUENCE_LENGTH = 64
+# TONE_MAPPING = {'r': 0, '1': 5, '2': 5, '3': 3, '4': 1, '5': 3, '6': 2, '7': 5, '8': 3, '9': 2, '/': 10, '_': 11}
+TONE_MAPPING = {'r': 0, '1': 1, '2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9, '/': 10, '_': 11}  # SIZE:12
+# should add other tones to pitches
+
 ACCEPTABLE_DURATIONS = [
     0.25,
     0.5,
@@ -23,9 +28,7 @@ ACCEPTABLE_DURATIONS = [
 ]
 
 
-def preprocess(dataset_path):
-    pass
-
+def create_datasets(dataset_path):
     # load the songs
     print("Loading songs...")
     songs = load_songs(dataset_path)
@@ -53,12 +56,14 @@ def preprocess(dataset_path):
 
 def load_songs(dataset_path):
     songs = []
-
     for path, subdir, files in os.walk(dataset_path):
-        for file in files:
-            if file[-3:] == "mxl":
-                song = m21.converter.parse(os.path.join(path, file))
-                songs.append(song)
+        for sub in subdir:  # loop over subdirectories in path
+            sub_path = os.path.join(path, sub)  # get full subdirectory path
+            for file in os.listdir(sub_path):
+                if file[-3:] == "mxl":
+                    file_path = os.path.join(sub_path, file)  # get full file path
+                    song = m21.converter.parse(file_path)
+                    songs.append(song)
     return songs
 
 
@@ -118,6 +123,7 @@ def encode_song(song, time_step=0.25):
     return encoded_song
 
 
+# Change words to tones
 def encode_lyrics(song, time_step=0.25):
     encoded_lyrics = []
 
@@ -127,8 +133,10 @@ def encode_lyrics(song, time_step=0.25):
             if event.tie is not None and event.tie.type == 'stop':
                 symbol_lyric = "_"
             else:
-                symbol_lyric = event.lyric
-
+                if event.lyric is None:
+                    symbol_lyric = "_"
+                else:
+                    symbol_lyric = get_tone(event.lyric)
         elif isinstance(event, m21.note.Rest):
             symbol_lyric = "r"
 
@@ -143,6 +151,11 @@ def encode_lyrics(song, time_step=0.25):
     encoded_lyrics = " ".join(map(str, encoded_lyrics))
 
     return encoded_lyrics
+
+
+def get_tone(word):
+    jyutping = pc.characters_to_jyutping(word)
+    return jyutping[0][1][-1]
 
 
 def create_single_file_datasets(dataset_path, song_single_dataset_path, lyric_single_dataset_path, sequence_length):
@@ -202,6 +215,7 @@ def generating_training_sequences(sequence_length):
         lyrics = fp.read()
 
     int_songs = convert_songs_to_int(songs)  # Map the songs to int
+    int_lyrics = convert_lyrics_to_int(lyrics)  # Map the lyrics to int
 
     inputs_songs = []
     inputs_lyrics = []
@@ -209,22 +223,44 @@ def generating_training_sequences(sequence_length):
 
     # generate the training sequences (e.g. 100 notes -> 36 training samples)
     num_sequences = len(int_songs) - sequence_length
-    for i in range(num_sequences):
-        inputs_songs.append(int_songs[i:i + sequence_length])
-        inputs_lyrics.append(lyrics[i:i + sequence_length])
-        targets.append(int_songs[i + sequence_length - 1])
 
-    for sublist in inputs_songs:
-        sublist[-1] = 0  # Set the last element of every note sequence to 0 (It's the prediction lol)
+    for i in range(num_sequences):
+        training_songs = int_songs[i:i + sequence_length]
+        training_songs[-1] = 0
+        training_lyrics = int_lyrics[i:i + sequence_length]
+        training_targets = int_songs[i + sequence_length - 1]
+
+        inputs_songs.append(training_songs)
+        inputs_lyrics.append(training_lyrics)
+        targets.append(training_targets)
 
     # one-hot encoding
     # input shape: (# of sequences, sequence length) -> (# of sequences, sequence length, vocabulary size)
-    inputs_songs = tf.keras.utils.to_categorical(inputs_songs, num_classes=len(set(int_songs)))
-    inputs_songs = tf.keras.utils.to_categorical(inputs_songs, num_classes=5)  # 5 pitches
+    # E.g.
+    # [
+    #   [1, 2, 3, 4, 5],
+    #   [2, 3, 4, 5, 6]
+    # ]
+    # Becomes
+    # [
+    #   [ [1, 0, 0, 0, 0, 0], [0, 1, 0, 0, 0, 0], ... [0, 0, 0, 0, 1, 0] ],
+    #   [ [0, 1, 0, 0, 0, 0], [0, 0, 1, 0, 0, 0], ... [0, 0, 0, 0, 0, 1] ]
+    # ]
+
+    vocabulary_size = len(set(int_songs))
+
+    inputs_songs = tf.keras.utils.to_categorical(inputs_songs, num_classes=vocabulary_size)
+    inputs_lyrics = tf.keras.utils.to_categorical(inputs_lyrics, num_classes=12)
+
+    print(inputs_songs.shape)
+    print(inputs_lyrics.shape)
+
+    inputs = tf.concat([inputs_songs, inputs_lyrics], 2)
+    print(inputs)
 
     targets = np.array(targets)
 
-    return inputs_songs, inputs_lyrics, targets
+    return inputs, targets
 
 
 def convert_songs_to_int(songs):
@@ -244,14 +280,24 @@ def convert_songs_to_int(songs):
     return int_songs
 
 
+def convert_lyrics_to_int(songs):
+    int_lyrics = []
+
+    # cast songs string to a list
+    songs = songs.split()
+
+    # map songs to int
+    for symbol in songs:
+        int_lyrics.append(TONE_MAPPING[symbol])
+
+    return int_lyrics
+
+
 def main():
-    preprocess(RAW_DATA_PATH)
+    create_datasets(RAW_DATA_PATH)
     songs, lyrics = create_single_file_datasets(SAVE_DIR, SINGLE_SONGS_FILE_DATASET,
                                                 SINGLE_LYRICS_FILE_DATASET, SEQUENCE_LENGTH)
     create_mapping(songs, MAPPING_PATH)
-
-    # TODO: Adapt these lines of code
-    # inputs, targets = generating_training_sequences(SEQUENCE_LENGTH)
 
 
 if __name__ == "__main__":
