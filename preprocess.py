@@ -12,9 +12,14 @@ SINGLE_LYRICS_FILE_DATASET = "file_lyrics_dataset"
 
 MAPPING_PATH = "mapping.json"
 SEQUENCE_LENGTH = 64
-# TONE_MAPPING = {'r': 0, '1': 5, '2': 5, '3': 3, '4': 1, '5': 3, '6': 2, '7': 5, '8': 3, '9': 2, '/': 10, '_': 11}
-TONE_MAPPING = {'r': 0, '1': 1, '2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9, '/': 10, '_': 11}  # SIZE:12
-# should add other tones to pitches
+
+# TODO: Experiment with pitches
+TONE_MAPPING = {'r': 0, '/': 0, '_': 0, '1': 4, '2': 4, '3': 3, '4': 1, '5': 3, '6': 2, '7': 4, '8': 3, '9': 2}
+TONE_MAPPING_SIZE = 5
+
+# TONE_MAPPING = {'r': 0, '/': 0, '_': 0, '1': 1, '2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9}
+# TONE_MAPPING_SIZE = 10
+
 
 ACCEPTABLE_DURATIONS = [
     0.25,
@@ -250,7 +255,7 @@ def generating_training_sequences(sequence_length):
     vocabulary_size = len(set(int_songs))
 
     inputs_songs = tf.keras.utils.to_categorical(inputs_songs, num_classes=vocabulary_size)
-    inputs_lyrics = tf.keras.utils.to_categorical(inputs_lyrics, num_classes=12)
+    inputs_lyrics = tf.keras.utils.to_categorical(inputs_lyrics, num_classes=TONE_MAPPING_SIZE)
 
     print(inputs_songs.shape)
     print(inputs_lyrics.shape)

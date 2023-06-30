@@ -1,13 +1,13 @@
 import keras.layers
-from preprocess import generating_training_sequences, SEQUENCE_LENGTH
+from preprocess import generating_training_sequences, SEQUENCE_LENGTH, TONE_MAPPING_SIZE
 import tensorflow as tf
 
 # vocab size
-OUTPUT_UNITS = 24 + 12  # TODO: Change to actual mapping size (VOCAB + 12)
+OUTPUT_UNITS = 24 + TONE_MAPPING_SIZE  # Change to actual mapping size in mapping.json
 NUM_UNITS = [256]
 LOSS = "sparse_categorical_crossentropy"
 LEARNING_RATE = 0.001
-EPOCHS = 50
+EPOCHS = 20
 BATCH_SIZE = 64
 SAVE_MODEL_PATH = "model.h5"
 

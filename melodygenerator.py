@@ -3,7 +3,7 @@ import tensorflow as tf
 import json
 import numpy as np
 import music21 as m21
-from preprocess import SEQUENCE_LENGTH, MAPPING_PATH
+from preprocess import SEQUENCE_LENGTH, MAPPING_PATH, TONE_MAPPING, TONE_MAPPING_SIZE
 
 
 class MelodyGenerator:
@@ -14,45 +14,78 @@ class MelodyGenerator:
         self.model = tf.keras.models.load_model(model_path)
 
         with open(MAPPING_PATH, "r") as fp:
-            self._mappings = json.load(fp)
+            self._notes_mapping = json.load(fp)
 
         self._start_symbols = ["/"] * SEQUENCE_LENGTH
 
-    def generate_melody(self, seed, num_steps, max_sequence_length, temperature):
+    def generate_melody(self, first_note, all_tones, max_sequence_length, temperature):
 
         # create seed with start symbols
-        seed = seed.split()
-        melody = seed
-        seed = self._start_symbols + seed
 
-        # map seed to int
-        seed = [self._mappings[symbol] for symbol in seed]
+        all_tones = all_tones.split()
+        seed_notes = first_note.split()
 
-        for _ in range(num_steps):
+        result_melody = seed_notes  # TODO: Adapt to tuple
+
+        seed_tones = self._start_symbols
+        seed_notes = self._start_symbols + seed_notes
+
+        # map seeds to int
+        seed_tones = [TONE_MAPPING[symbol] for symbol in seed_tones]
+        seed_notes = [self._notes_mapping[symbol] for symbol in seed_notes]
+
+        while True:
 
             # limit the seed to max_sequence_length
-            seed = seed[-max_sequence_length:]
+            seed_notes = seed_notes[-(max_sequence_length - 1):]  # E.g. Sequence length of 64, leave 1 for prediction
+            seed_tones = seed_tones[-(max_sequence_length - 1):]
+
+            print(seed_notes)
+            print(seed_tones)
+
+            input_notes = seed_notes
+            input_notes.append(0)
+            input_tones = seed_tones
+            input_tones.append(TONE_MAPPING[all_tones[0]])
+
+            print(len(input_notes))
+            print(len(input_tones))
+
+            print(input_notes)
+            print(input_tones)
 
             # one-hot encode the seed
-            onehot_seed = tf.keras.utils.to_categorical(seed, num_classes=len(self._mappings))
+            onehot_seed_notes = tf.keras.utils.to_categorical(input_notes, num_classes=len(self._notes_mapping))
+            onehot_seed_tones = tf.keras.utils.to_categorical(input_tones, num_classes=TONE_MAPPING_SIZE)
+
             # 2D->3D
-            onehot_seed = onehot_seed[np.newaxis, ...]
+            onehot_seed_notes = onehot_seed_notes[np.newaxis, ...]
+            onehot_seed_tones = onehot_seed_tones[np.newaxis, ...]
+
+            # Concat
+            onehot_seed = tf.concat([onehot_seed_notes, onehot_seed_tones], 2)
 
             # make a prediction
             probabilities = self.model.predict(onehot_seed)[0]
-            output_int = self._sample_with_temperature(probabilities, temperature)
+            notes_output_int = self._sample_with_temperature(probabilities, temperature)
 
-            seed.append(output_int)
-
+            seed_notes.append(notes_output_int)
             # map
-            output_symbol = [k for k, v in self._mappings.items() if v == output_int][0]
+            notes_output_symbol = [k for k, v in self._notes_mapping.items() if v == notes_output_int][0]
 
-            if output_symbol == "/":
+            tones_output_int = TONE_MAPPING[all_tones[0]] if notes_output_symbol != "_" or "r" else TONE_MAPPING["_"]
+
+            seed_tones.append(tones_output_int)
+
+            if notes_output_symbol != "_" or "r":
+                all_tones.pop(0)
+
+            if notes_output_symbol == "/" or len(all_tones) == 0:
                 break
 
-            melody.append(output_symbol)
+            result_melody.append(notes_output_symbol)
 
-        return melody
+        return result_melody
 
     def save_melody(self, melody, step_duration=0.25, format="midi", file_name="melody.mid"):
 
@@ -107,7 +140,9 @@ class MelodyGenerator:
 
 if __name__ == "__main__":
     mg = MelodyGenerator()
-    seed = "67 67 67 67 67 _ "
-    melody = mg.generate_melody(seed, 10000, SEQUENCE_LENGTH, 0.1)
+    tones = "4 6 6 1 2 1 2 2 9 3"
+    initial_note = "60"
+
+    melody = mg.generate_melody(initial_note, tones, SEQUENCE_LENGTH, 0.1)
     print(melody)
     mg.save_melody(melody)
