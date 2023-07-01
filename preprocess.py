@@ -1,5 +1,7 @@
 import os
 import json
+import string
+
 import music21 as m21
 import numpy as np
 import tensorflow as tf
@@ -14,11 +16,11 @@ MAPPING_PATH = "mapping.json"
 SEQUENCE_LENGTH = 64
 
 # TODO: Experiment with pitches
-TONE_MAPPING = {'r': 0, '/': 0, '_': 0, '1': 4, '2': 4, '3': 3, '4': 1, '5': 3, '6': 2, '7': 4, '8': 3, '9': 2}
-TONE_MAPPING_SIZE = 5
+# TONE_MAPPING = {'r': 0, '_': 0, '1': 4, '2': 4, '3': 3, '4': 1, '5': 3, '6': 2, '7': 4, '8': 3, '9': 2, '/': 5}
+# TONE_MAPPING_SIZE = 6
 
-# TONE_MAPPING = {'r': 0, '/': 0, '_': 0, '1': 1, '2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9}
-# TONE_MAPPING_SIZE = 10
+TONE_MAPPING = {'r': 0, '/': 0, '_': 0, '1': 1, '2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9}
+TONE_MAPPING_SIZE = 10
 
 
 ACCEPTABLE_DURATIONS = [
@@ -138,7 +140,7 @@ def encode_lyrics(song, time_step=0.25):
             if event.tie is not None and event.tie.type == 'stop':
                 symbol_lyric = "_"
             else:
-                if event.lyric is None:
+                if event.lyric is None or all(c in string.ascii_letters for c in event.lyric):
                     symbol_lyric = "_"
                 else:
                     symbol_lyric = get_tone(event.lyric)
@@ -210,13 +212,13 @@ def create_mapping(songs, mapping_path):
         json.dump(mappings, fp, indent=4)
 
 
-def generating_training_sequences(sequence_length):
+def generating_training_sequences(sequence_length, song_file_dataset, lyrics_file_dataset):
     # Give the network 4 bars of notes (64 time steps) and 4 bar of tones, with the tone that the target has
 
-    with open(SINGLE_SONGS_FILE_DATASET, "r") as fp:
+    with open(song_file_dataset, "r") as fp:
         songs = fp.read()
 
-    with open(SINGLE_LYRICS_FILE_DATASET, "r") as fp:
+    with open(lyrics_file_dataset, "r") as fp:
         lyrics = fp.read()
 
     int_songs = convert_songs_to_int(songs)  # Map the songs to int
@@ -252,7 +254,7 @@ def generating_training_sequences(sequence_length):
     #   [ [0, 1, 0, 0, 0, 0], [0, 0, 1, 0, 0, 0], ... [0, 0, 0, 0, 0, 1] ]
     # ]
 
-    vocabulary_size = len(set(int_songs))
+    vocabulary_size = 25  # CHANGE TO ACTUAL MAPPING SIZE
 
     inputs_songs = tf.keras.utils.to_categorical(inputs_songs, num_classes=vocabulary_size)
     inputs_lyrics = tf.keras.utils.to_categorical(inputs_lyrics, num_classes=TONE_MAPPING_SIZE)

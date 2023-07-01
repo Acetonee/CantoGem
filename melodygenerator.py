@@ -48,11 +48,8 @@ class MelodyGenerator:
             input_tones = seed_tones
             input_tones.append(TONE_MAPPING[all_tones[0]])
 
-            print(len(input_notes))
-            print(len(input_tones))
-
-            print(input_notes)
-            print(input_tones)
+            # print(input_notes)
+            # print(input_tones)
 
             # one-hot encode the seed
             onehot_seed_notes = tf.keras.utils.to_categorical(input_notes, num_classes=len(self._notes_mapping))
@@ -73,7 +70,7 @@ class MelodyGenerator:
             # map
             notes_output_symbol = [k for k, v in self._notes_mapping.items() if v == notes_output_int][0]
 
-            tones_output_int = TONE_MAPPING[all_tones[0]] if notes_output_symbol != "_" or "r" else TONE_MAPPING["_"]
+            tones_output_int = TONE_MAPPING["_"] if notes_output_symbol == "_" or "r" else TONE_MAPPING[all_tones[0]]
 
             seed_tones.append(tones_output_int)
 
@@ -140,7 +137,7 @@ class MelodyGenerator:
 
 if __name__ == "__main__":
     mg = MelodyGenerator()
-    tones = "4 6 6 1 2 1 2 2 9 3"
+    tones = "4 6 6 1 2 1 2 2 9 3"  # After 9 3
     initial_note = "60"
 
     melody = mg.generate_melody(initial_note, tones, SEQUENCE_LENGTH, 0.1)
