@@ -1,10 +1,10 @@
 import keras.layers
 from preprocess import generating_training_sequences, SEQUENCE_LENGTH, TONE_MAPPING_SIZE, \
-    SINGLE_SONGS_FILE_DATASET, SINGLE_LYRICS_FILE_DATASET
+    SINGLE_SONGS_FILE_DATASET, SINGLE_LYRICS_FILE_DATASET, NOTE_MAPPING_SIZE
 import tensorflow as tf
 
 # vocab size
-OUTPUT_UNITS = 25 + TONE_MAPPING_SIZE  # Change to actual mapping size in mapping.json
+OUTPUT_UNITS = NOTE_MAPPING_SIZE + TONE_MAPPING_SIZE
 NUM_UNITS = [256]
 LOSS = "sparse_categorical_crossentropy"
 LEARNING_RATE = 0.001
@@ -55,5 +55,5 @@ def evaluate(testing_input_path=TEST_INPUT_PATH, testing_output_path=TEST_OUTPUT
 
 
 if __name__ == "__main__":
-    # train()
+    train()
     evaluate()

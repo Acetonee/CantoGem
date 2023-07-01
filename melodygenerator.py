@@ -21,41 +21,40 @@ class MelodyGenerator:
     def generate_melody(self, first_note, all_tones, max_sequence_length, temperature):
 
         # create seed with start symbols
-
         all_tones = all_tones.split()
         seed_notes = first_note.split()
+        result_melody = seed_notes  # TODO: Adapt to tuple so it also shows lyrics
 
-        result_melody = seed_notes  # TODO: Adapt to tuple
-
-        seed_tones = self._start_symbols
+        seed_tones = self._start_symbols + list(all_tones[0])
         seed_notes = self._start_symbols + seed_notes
 
         # map seeds to int
         seed_tones = [TONE_MAPPING[symbol] for symbol in seed_tones]
         seed_notes = [self._notes_mapping[symbol] for symbol in seed_notes]
 
+        first_tone = True
+
         while True:
 
             # limit the seed to max_sequence_length
             seed_notes = seed_notes[-(max_sequence_length - 1):]  # E.g. Sequence length of 64, leave 1 for prediction
-            seed_tones = seed_tones[-(max_sequence_length - 1):]
+            seed_tones = seed_tones[-max_sequence_length:]
 
             print(seed_notes)
             print(seed_tones)
 
-            input_notes = seed_notes
-            input_notes.append(0)
-            input_tones = seed_tones
-            input_tones.append(TONE_MAPPING[all_tones[0]])
+            input_notes = seed_notes.copy()
+            input_notes.append(0)  # Mask the last element to 0
+            input_tones = seed_tones.copy()
+            # input_tones.append(TONE_MAPPING[current_tone])  # Add the tone of the note to be predicted
 
-            # print(input_notes)
-            # print(input_tones)
+            print(input_notes)
+            print(input_tones)
 
             # one-hot encode the seed
             onehot_seed_notes = tf.keras.utils.to_categorical(input_notes, num_classes=len(self._notes_mapping))
             onehot_seed_tones = tf.keras.utils.to_categorical(input_tones, num_classes=TONE_MAPPING_SIZE)
 
-            # 2D->3D
             onehot_seed_notes = onehot_seed_notes[np.newaxis, ...]
             onehot_seed_tones = onehot_seed_tones[np.newaxis, ...]
 
@@ -67,19 +66,30 @@ class MelodyGenerator:
             notes_output_int = self._sample_with_temperature(probabilities, temperature)
 
             seed_notes.append(notes_output_int)
+
             # map
             notes_output_symbol = [k for k, v in self._notes_mapping.items() if v == notes_output_int][0]
 
-            tones_output_int = TONE_MAPPING["_"] if notes_output_symbol == "_" or "r" else TONE_MAPPING[all_tones[0]]
+            if first_tone:
+                all_tones.pop(0)
+                first_tone = False
+
+            if len(all_tones) == 0:
+                tones_output_int = 0
+            else:
+                tones_output_int = int(all_tones[0])
 
             seed_tones.append(tones_output_int)
 
-            if notes_output_symbol != "_" or "r":
-                all_tones.pop(0)
+            if notes_output_symbol != "_" and notes_output_symbol != "r":
+                all_tones.pop(0)  # Remove current tone, pop first element
+                first_tone = False
 
-            if notes_output_symbol == "/" or len(all_tones) == 0:
+            # Reached end
+            if notes_output_symbol == "/":
                 break
 
+            # Append to final output
             result_melody.append(notes_output_symbol)
 
         return result_melody
@@ -137,7 +147,8 @@ class MelodyGenerator:
 
 if __name__ == "__main__":
     mg = MelodyGenerator()
-    tones = "4 6 6 1 2 1 2 2 9 3"  # After 9 3
+    # tones = "4 6 6 1 2 1 2 2 9 3"  # After 9 3
+    tones = "1 5 2 4 3 6 3 4 5 1"
     initial_note = "60"
 
     melody = mg.generate_melody(initial_note, tones, SEQUENCE_LENGTH, 0.1)

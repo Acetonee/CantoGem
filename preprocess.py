@@ -19,9 +19,10 @@ SEQUENCE_LENGTH = 64
 # TONE_MAPPING = {'r': 0, '_': 0, '1': 4, '2': 4, '3': 3, '4': 1, '5': 3, '6': 2, '7': 4, '8': 3, '9': 2, '/': 5}
 # TONE_MAPPING_SIZE = 6
 
-TONE_MAPPING = {'r': 0, '/': 0, '_': 0, '1': 1, '2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9}
-TONE_MAPPING_SIZE = 10
+TONE_MAPPING = {'0': 0, '1': 1, '2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9, '/': 10}
+TONE_MAPPING_SIZE = 11  # CHANGE WHEN NECESSARY
 
+NOTE_MAPPING_SIZE = 25  # CHANGE WHEN NECESSARY
 
 ACCEPTABLE_DURATIONS = [
     0.25,
@@ -133,19 +134,32 @@ def encode_song(song, time_step=0.25):
 # Change words to tones
 def encode_lyrics(song, time_step=0.25):
     encoded_lyrics = []
+    previous_lyric = ""
+    symbol_lyric = ""
+    first_lyric = ""
+
+    for event in song.flat.notesAndRests:
+        if isinstance(event, m21.note.Note):
+            first_lyric = get_tone(event.lyric)
+            break
 
     for event in song.flat.notesAndRests:
 
         if isinstance(event, m21.note.Note):
             if event.tie is not None and event.tie.type == 'stop':
-                symbol_lyric = "_"
+                symbol_lyric = previous_lyric
             else:
                 if event.lyric is None or all(c in string.ascii_letters for c in event.lyric):
-                    symbol_lyric = "_"
+                    # Handle errors
+                    symbol_lyric = "0"
                 else:
                     symbol_lyric = get_tone(event.lyric)
+                    previous_lyric = symbol_lyric
+
         elif isinstance(event, m21.note.Rest):
-            symbol_lyric = "r"
+            if previous_lyric == "":
+                symbol_lyric = first_lyric
+                previous_lyric = symbol_lyric
 
         steps = int(event.duration.quarterLength / time_step)
 
@@ -153,11 +167,34 @@ def encode_lyrics(song, time_step=0.25):
             if step == 0:
                 encoded_lyrics.append(symbol_lyric)
             else:
-                encoded_lyrics.append("_")
+                encoded_lyrics.append(previous_lyric)
 
-    encoded_lyrics = " ".join(map(str, encoded_lyrics))
+    # Example for modification
+    # Original: 1, 1, 1, 1, 2, 2, 3, 3, 3, 3, 4, 4
+    # We have to let the model decide when to change notes
+    #      New: 1, 2, 2, 2, 2, 3, 3, 4, 4, 4, 4, 0
 
-    return encoded_lyrics
+    modified_encoded_lyrics = []
+    i = 0
+    j = 0
+
+    modified_encoded_lyrics.append(encoded_lyrics[0])
+    while True:
+        i = i + 1
+        if encoded_lyrics[i] != encoded_lyrics[j]:
+            for x in range(i - j):
+                modified_encoded_lyrics.append(encoded_lyrics[i])
+            j = i
+
+        if i == len(encoded_lyrics) - 1:
+            break
+
+    for x in range(len(encoded_lyrics) - len(modified_encoded_lyrics)):
+        modified_encoded_lyrics.append(0)
+
+    modified_encoded_lyrics = " ".join(map(str, modified_encoded_lyrics))
+
+    return modified_encoded_lyrics
 
 
 def get_tone(word):
@@ -174,11 +211,13 @@ def create_single_file_datasets(dataset_path, song_single_dataset_path, lyric_si
     # load encoded songs and lyrics + add delimiters
     for path, _, files in os.walk(dataset_path):
         for file in files:
-            with open(os.path.join(path, file), "r") as fp:
-                song = fp.readline().strip()
-                lyrics = fp.readline().strip()
-            all_songs = all_songs + song + " " + new_song_delimiter
-            all_lyrics = all_lyrics + lyrics + " " + new_song_delimiter
+            if file != '.DS_Store':
+                with open(os.path.join(path, file), "r") as fp:
+                    song = fp.readline().strip()
+                    lyrics = fp.readline().strip()
+
+                all_songs = all_songs + song + " " + new_song_delimiter
+                all_lyrics = all_lyrics + lyrics + " " + new_song_delimiter
 
     # remove last space
     all_songs = all_songs[:-1]
@@ -189,6 +228,7 @@ def create_single_file_datasets(dataset_path, song_single_dataset_path, lyric_si
 
     with open(lyric_single_dataset_path, "w") as fp:
         fp.write(all_lyrics)
+
 
     return all_songs, all_lyrics
 
@@ -229,9 +269,14 @@ def generating_training_sequences(sequence_length, song_file_dataset, lyrics_fil
     targets = []
 
     # generate the training sequences (e.g. 100 notes -> 36 training samples)
+
+    if len(int_songs) != len(int_lyrics):
+        raise Exception("The length of the song is not equal to the length of the lyrics")
+
     num_sequences = len(int_songs) - sequence_length
 
     for i in range(num_sequences):
+
         training_songs = int_songs[i:i + sequence_length]
         training_songs[-1] = 0
         training_lyrics = int_lyrics[i:i + sequence_length]
@@ -254,9 +299,7 @@ def generating_training_sequences(sequence_length, song_file_dataset, lyrics_fil
     #   [ [0, 1, 0, 0, 0, 0], [0, 0, 1, 0, 0, 0], ... [0, 0, 0, 0, 0, 1] ]
     # ]
 
-    vocabulary_size = 25  # CHANGE TO ACTUAL MAPPING SIZE
-
-    inputs_songs = tf.keras.utils.to_categorical(inputs_songs, num_classes=vocabulary_size)
+    inputs_songs = tf.keras.utils.to_categorical(inputs_songs, num_classes=NOTE_MAPPING_SIZE)
     inputs_lyrics = tf.keras.utils.to_categorical(inputs_lyrics, num_classes=TONE_MAPPING_SIZE)
 
     print(inputs_songs.shape)
