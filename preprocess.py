@@ -93,23 +93,45 @@ def transpose(song):
 
 
 def encode_song(song, time_step=0.25):
+
     elements = []
+    current_note = {"pitch": None, "duration": None, "tone": None}
 
     for event in song.flat.notesAndRests:
-
         if isinstance(event, m21.note.Note):
-            element = {"pitch": event.pitch.midi, "duration": int(event.duration.quarterLength / time_step)}
-        elif isinstance(event, m21.note.Rest):
-            element = {"pitch": 0, "duration": int(event.duration.quarterLength / time_step)}
+            if current_note["pitch"] is None:
+                current_note["pitch"] = event.pitch.midi
+                current_note["duration"] = event.duration.quarterLength
+                current_note["tone"] = get_tone(event.lyric)
 
-        elements.append(element)
+            elif current_note["pitch"] == event.pitch.midi and event.tie is not None:
+                current_note["duration"] += event.duration.quarterLength
+                # No need add tone because the note before the tie must have the same tone
+
+            else:
+                elements.append({"pitch": current_note["pitch"], "duration": int(current_note["duration"] / time_step),
+                                 "tone": current_note["tone"]})
+                current_note["pitch"] = event.pitch.midi
+                current_note["duration"] = event.duration.quarterLength
+                current_note["tone"] = get_tone(event.lyric)
+
+        elif isinstance(event, m21.note.Rest):
+            if current_note["pitch"] is not None:
+                elements.append({"pitch": current_note["pitch"], "duration": int(current_note["duration"] / time_step),
+                                 "tone": current_note["tone"]})
+                current_note = {"pitch": None, "duration": None, "tone": None}
+            elements.append({"pitch": 0, "duration": int(event.duration.quarterLength / time_step), "tone": 0})
+
+    if current_note["pitch"] is not None:
+        elements.append({"pitch": current_note["pitch"], "duration": int(current_note["duration"] / time_step),
+                         "tone": current_note["tone"]})
 
     return elements
 
 
 def get_tone(word):
     jyutping = pc.characters_to_jyutping(word)
-    return jyutping[0][1][-1]
+    return int(jyutping[0][1][-1])
 
 
 def create_mapping(encoded_song):
@@ -140,11 +162,16 @@ def generating_training_sequences(dataset_path=DATASET_PATH, mapping_path=MAPPIN
     # Determine the number of unique names and values
     num_pitch = len(pitch_to_id)
     num_duration = len(duration_to_id)
+    num_tone = 10
 
     inputs = []
     outputs = []
+
     for path, _, files in os.walk(dataset_path):
         for fileId, filename in enumerate(files):
+            if file == '.DS_Store':
+                continue
+
             stdout.write(f"\rProcessing {filename}   ({fileId + 1} / {len(files)})     ")
             stdout.flush()
             with open(os.path.join(path, filename)) as file:
@@ -159,6 +186,7 @@ def generating_training_sequences(dataset_path=DATASET_PATH, mapping_path=MAPPIN
 
                     pitch_id = pitch_to_id[str(pitch)]
                     duration_id = duration_to_id[str(duration)]
+                    tone_id = int(element["tone"])  # Tone no need mapping
 
                     pos = (pos + duration) % 64
                     # Create a list of one-hot encoded vectors for each element
@@ -170,13 +198,15 @@ def generating_training_sequences(dataset_path=DATASET_PATH, mapping_path=MAPPIN
                     encoded_vector_inputs.append(
                         [int(pitch_id == i) for i in range(num_pitch)] +
                         [int(duration_id == j) for j in range(num_duration)] +
+                        [int(tone_id == k) for k in range(num_tone)] +
                         # Note position within a single bar
                         [int(pos == k) for k in range(16)] +
                         # Note position within 4-bar phrase
                         [int((pos // 16) % 4 == k) for k in range(4)]
                     )
+
                 for i in range(no_of_inputs):
-                    inputs.append(encoded_vector_inputs[i : (i + SEQUENCE_LENGTH)])
+                    inputs.append(encoded_vector_inputs[i:(i + SEQUENCE_LENGTH)])
                     outputs.append(encoded_vector_outputs[i + SEQUENCE_LENGTH])
 
     print("\nFinished file processing.")
