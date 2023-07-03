@@ -1,13 +1,16 @@
 import os
 import json
+from sys import stdout
+from time import sleep
 
 import music21 as m21
+import numpy as np
 import pycantonese as pc
 
 RAW_DATA_PATH = "rawdata"
 DATASET_PATH = "dataset"
 MAPPING_PATH = "mappings"
-SEQUENCE_LENGTH = 64
+SEQUENCE_LENGTH = 16
 
 
 ACCEPTABLE_DURATIONS = [
@@ -45,7 +48,6 @@ def create_datasets_and_mapping(raw_data_path, save_dir):
         with open(os.path.join(save_dir, str(i) + ".json"), "w") as fp:
             json.dump(encoded_song, fp, indent=4)
 
-    print(encoded_songs_combined)
     create_mapping(encoded_songs_combined)
 
 
@@ -135,21 +137,56 @@ def generating_training_sequences(dataset_path=DATASET_PATH, mapping_path=MAPPIN
     with open(os.path.join(mapping_path, "duration_mapping.json"), "r") as duration_file:
         duration_to_id = json.load(duration_file)
 
-    with open(os.path.join(dataset_path, "0.json")) as file:
-        dataset = json.load(file)
-
-    # Create a list of encoded elements, where each element is a tuple of (name_id, value_id)
-    encoded_elements = [(pitch_to_id[str(element["pitch"])], duration_to_id[str(element["duration"])]) for element in
-                        dataset]
-
     # Determine the number of unique names and values
     num_pitch = len(pitch_to_id)
     num_duration = len(duration_to_id)
 
-    # Create a list of one-hot encoded vectors for each element
-    encoded_vectors = [[int(pitch_id == i) for i in range(num_pitch)] + [int(duration_id == j) for j in range(num_duration)]
-                       for pitch_id, duration_id in encoded_elements]
-    print(encoded_vectors)
+    inputs = []
+    outputs = []
+    for path, _, files in os.walk(dataset_path):
+        for fileId, filename in enumerate(files):
+            stdout.write(f"\rProcessing {filename}   ({fileId + 1} / {len(files)})     ")
+            stdout.flush()
+            with open(os.path.join(path, filename)) as file:
+                data = json.load(file)
+                no_of_inputs = len(data) - SEQUENCE_LENGTH
+                pos = 0
+                encoded_vector_inputs = []
+                encoded_vector_outputs = []
+                for element in data:
+                    pitch = int(element["pitch"])
+                    duration = int(element["duration"])
+
+                    pitch_id = pitch_to_id[str(pitch)]
+                    duration_id = duration_to_id[str(duration)]
+
+                    pos = (pos + duration) % 64
+                    # Create a list of one-hot encoded vectors for each element
+                    encoded_vector_outputs.append(
+                        [int(pitch_id == i) for i in range(num_pitch)] +
+                        [int(duration_id == j) for j in range(num_duration)]
+                    )
+                    # Add position and tone data to input
+                    encoded_vector_inputs.append(
+                        [int(pitch_id == i) for i in range(num_pitch)] +
+                        [int(duration_id == j) for j in range(num_duration)] +
+                        # Note position within a single bar
+                        [int(pos == k) for k in range(16)] +
+                        # Note position within 4-bar phrase
+                        [int((pos // 16) % 4 == k) for k in range(4)]
+                    )
+                for i in range(no_of_inputs):
+                    inputs.append(encoded_vector_inputs[i : (i + SEQUENCE_LENGTH)])
+                    outputs.append(encoded_vector_outputs[i + SEQUENCE_LENGTH])
+
+    print("\nFinished file processing.")
+
+    print(f"There are {len(inputs)} sequences.")
+
+    inputs = np.array(inputs)
+    outputs = np.array(outputs)
+
+    return inputs, outputs
 
 
 def main():
