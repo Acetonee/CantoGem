@@ -39,10 +39,11 @@ id_to_duration = { v: int(k) for k, v in duration_to_id.items() }
 num_pitch = len(pitch_to_id)
 num_duration = len(duration_to_id)
 num_tone = 11
-num_bar_internal = 16
-num_bar_external = 4
+num_pos_internal = 16
+num_pos_external = 4
+num_when_end = 8
 
-input_params = ("pitch", "duration", "current_tone", "next_tone", "pos_internal", "pos_external")
+input_params = ("pitch", "duration", "current_tone", "next_tone", "pos_internal", "pos_external", "when_end")
 output_params = ("pitch", "duration")
 
 param_shapes = {
@@ -50,8 +51,9 @@ param_shapes = {
     "duration": num_duration,
     "current_tone": num_tone,
     "next_tone": num_tone,
-    "pos_internal": num_bar_internal,
-    "pos_external": num_bar_external,
+    "pos_internal": num_pos_internal,
+    "pos_external": num_pos_external,
+    "when_end": num_when_end,
 }
 
 
@@ -193,6 +195,7 @@ def generating_training_sequences(dataset_path=DATASET_PATH):
         "next_tone": [],
         "pos_internal": [],
         "pos_external": [],
+        "when_end": [],
     }
     outputs = {
         "pitch": [],
@@ -217,6 +220,7 @@ def generating_training_sequences(dataset_path=DATASET_PATH):
                     "next_tone": [],
                     "pos_internal": [],
                     "pos_external": [],
+                    "when_end": [],
                 }
                 onehot_vector_outputs = {
                     "pitch": [],
@@ -232,6 +236,7 @@ def generating_training_sequences(dataset_path=DATASET_PATH):
                     next_tone_id = END_TONE if index + 1 >= len(data) else int(data[index + 1]["tone"])
 
                     pos = (pos + duration) % 64
+                    until_end = len(data) - index - 1
                     # Create a list of one-hot encoded vectors for each element
                     bulk_append(onehot_vector_outputs, {
                         "pitch": [int(pitch_id == i) for i in range(num_pitch)],
@@ -245,9 +250,10 @@ def generating_training_sequences(dataset_path=DATASET_PATH):
                         "current_tone": [int(current_tone_id == k) for k in range(num_tone)],
                         "next_tone": [int(next_tone_id == k) for k in range(num_tone)],
                         # Note position within a single bar
-                        "pos_internal": [int(pos % 16 == k) for k in range(16)],
+                        "pos_internal": [int(pos % 16 == k) for k in range(num_pos_internal)],
                         # Note position within 4-bar phrase
-                        "pos_external": [int((pos // 16) % 4 == k) for k in range(4)],
+                        "pos_external": [int((pos // 16) % 4 == k) for k in range(num_pos_external)],
+                        "when_end": [int(until_end == k) for k in range(num_when_end)],
                     })
 
                 for i in range(no_of_inputs):

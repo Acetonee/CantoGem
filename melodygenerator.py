@@ -28,6 +28,8 @@ class MelodyGenerator:
             next_tone_id = END_TONE if index + 1 >= len(tones) else tones[index + 1]
 
             pos = (pos + duration) % 64
+            
+            until_end = len(tones) - index - 1
             # Create a list of one-hot encoded vectors for each element
             # Add position and tone data to input
             single_input: dict[str, int] = {
@@ -39,6 +41,7 @@ class MelodyGenerator:
                 "pos_internal": pos % 16,
                 # Note position within 4-bar phrase
                 "pos_external": (pos // 16) % 4,
+                "when_end": until_end,
             }
 
             for i, key in enumerate(input_params):
