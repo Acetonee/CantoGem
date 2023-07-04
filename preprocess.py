@@ -32,12 +32,27 @@ with open(os.path.join(MAPPING_PATH, "pitch_mapping.json"), "r") as pitch_file:
 with open(os.path.join(MAPPING_PATH, "duration_mapping.json"), "r") as duration_file:
     duration_to_id = json.load(duration_file)
 
+id_to_pitch = { v: int(k) for k, v in pitch_to_id.items() }
+id_to_duration = { v: int(k) for k, v in duration_to_id.items() }
+
 # Determine the number of unique names and values
 num_pitch = len(pitch_to_id)
 num_duration = len(duration_to_id)
 num_tone = 11
 num_bar_internal = 16
 num_bar_external = 4
+
+input_params = ("pitch", "duration", "current_tone", "next_tone", "pos_internal", "pos_external")
+output_params = ("pitch", "duration")
+
+param_shapes = {
+    "pitch": num_pitch,
+    "duration": num_duration,
+    "current_tone": num_tone,
+    "next_tone": num_tone,
+    "pos_internal": num_bar_internal,
+    "pos_external": num_bar_external,
+}
 
 
 def create_datasets_and_mapping(raw_data_path, save_dir):
@@ -230,7 +245,7 @@ def generating_training_sequences(dataset_path=DATASET_PATH):
                         "current_tone": [int(current_tone_id == k) for k in range(num_tone)],
                         "next_tone": [int(next_tone_id == k) for k in range(num_tone)],
                         # Note position within a single bar
-                        "pos_internal": [int(pos == k) for k in range(16)],
+                        "pos_internal": [int(pos % 16 == k) for k in range(16)],
                         # Note position within 4-bar phrase
                         "pos_external": [int((pos // 16) % 4 == k) for k in range(4)],
                     })

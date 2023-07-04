@@ -1,5 +1,5 @@
 from preprocess import generating_training_sequences
-from preprocess import num_pitch, num_duration, num_tone, num_bar_internal, num_bar_external
+from preprocess import input_params, output_params, param_shapes
 
 from tensorflow import keras
 
@@ -12,18 +12,6 @@ SAVE_MODEL_PATH = "model.h5"
 
 
 def build_model():
-    input_params = ["pitch", "duration", "current_tone", "next_tone", "pos_internal", "pos_external"]
-    output_params = ["pitch", "duration"]
-
-    shapes = {
-        "pitch": num_pitch,
-        "duration": num_duration,
-        "current_tone": num_tone,
-        "next_tone": num_tone,
-        "pos_internal": num_bar_internal,
-        "pos_external": num_bar_external,
-    }
-
     input_layers = dict()
     inputs = dict()
 
@@ -31,8 +19,8 @@ def build_model():
 
     # create the model architecture
     for type in input_params:
-        input_layers[type] = keras.layers.Input(shape=(None, shapes[type]))
-        tmp = keras.layers.LSTM(shapes[type], return_sequences=True)(input_layers[type])
+        input_layers[type] = keras.layers.Input(shape=(None, param_shapes[type]))
+        tmp = keras.layers.LSTM(param_shapes[type], return_sequences=True)(input_layers[type])
         inputs[type] = keras.layers.Dropout(0.2)(tmp)
 
     combined_input = keras.layers.concatenate(list(inputs.values()))
@@ -48,7 +36,7 @@ def build_model():
         tmp = keras.layers.Dense(128, activation="relu")(x)
         tmp = keras.layers.BatchNormalization()(tmp)
         tmp = keras.layers.Dropout(0.2)(tmp)
-        outputs[type] = keras.layers.Dense(shapes[type], activation="softmax", name=type)(tmp)
+        outputs[type] = keras.layers.Dense(param_shapes[type], activation="softmax", name=type)(tmp)
 
     model = keras.Model(list(inputs.values()), list(outputs.values()))
 
