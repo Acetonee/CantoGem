@@ -24,6 +24,21 @@ ACCEPTABLE_DURATIONS = [
     4
 ]
 
+pitch_to_id = dict()
+duration_to_id = dict()
+with open(os.path.join(MAPPING_PATH, "pitch_mapping.json"), "r") as pitch_file:
+    pitch_to_id = json.load(pitch_file)
+
+with open(os.path.join(MAPPING_PATH, "duration_mapping.json"), "r") as duration_file:
+    duration_to_id = json.load(duration_file)
+
+# Determine the number of unique names and values
+num_pitch = len(pitch_to_id)
+num_duration = len(duration_to_id)
+num_tone = 10
+num_bar_internal = 16
+num_bar_external = 4
+
 
 def create_datasets_and_mapping(raw_data_path, save_dir):
     # load the songs
@@ -149,27 +164,28 @@ def create_mapping(encoded_song):
     with open(os.path.join(MAPPING_PATH, "duration_mapping.json"), "w") as duration_file:
         json.dump(duration_to_id, duration_file, indent=4)
 
+def bulk_append(dictList, new_dict):
+    for key, val in new_dict.items():
+        dictList[key].append(val)
 
-def generating_training_sequences(dataset_path=DATASET_PATH, mapping_path=MAPPING_PATH):
+def generating_training_sequences(dataset_path=DATASET_PATH):
     # Give the network 4 bars of notes (64 time steps) and 4 bar of tones, with the tone that the target has
 
-    with open(os.path.join(mapping_path, "pitch_mapping.json"), "r") as pitch_file:
-        pitch_to_id = json.load(pitch_file)
-
-    with open(os.path.join(mapping_path, "duration_mapping.json"), "r") as duration_file:
-        duration_to_id = json.load(duration_file)
-
-    # Determine the number of unique names and values
-    num_pitch = len(pitch_to_id)
-    num_duration = len(duration_to_id)
-    num_tone = 10
-
-    inputs = []
-    outputs = []
+    inputs = {
+        "pitch": [],
+        "duration": [],
+        "tone": [],
+        "pos_internal": [],
+        "pos_external": [],
+    }
+    outputs = {
+        "pitch": [],
+        "duration": [],
+    }
 
     for path, _, files in os.walk(dataset_path):
         for fileId, filename in enumerate(files):
-            if file == '.DS_Store':
+            if filename == '.DS_Store':
                 continue
 
             stdout.write(f"\rProcessing {filename}   ({fileId + 1} / {len(files)})     ")
@@ -178,8 +194,17 @@ def generating_training_sequences(dataset_path=DATASET_PATH, mapping_path=MAPPIN
                 data = json.load(file)
                 no_of_inputs = len(data) - SEQUENCE_LENGTH
                 pos = 0
-                encoded_vector_inputs = []
-                encoded_vector_outputs = []
+                onehot_vector_inputs = {
+                    "pitch": [],
+                    "duration": [],
+                    "tone": [],
+                    "pos_internal": [],
+                    "pos_external": [],
+                }
+                onehot_vector_outputs = {
+                    "pitch": [],
+                    "duration": [],
+                }
                 for element in data:
                     pitch = int(element["pitch"])
                     duration = int(element["duration"])
@@ -190,31 +215,31 @@ def generating_training_sequences(dataset_path=DATASET_PATH, mapping_path=MAPPIN
 
                     pos = (pos + duration) % 64
                     # Create a list of one-hot encoded vectors for each element
-                    encoded_vector_outputs.append(
-                        [int(pitch_id == i) for i in range(num_pitch)] +
-                        [int(duration_id == j) for j in range(num_duration)]
-                    )
+                    bulk_append(onehot_vector_outputs, {
+                        "pitch": [int(pitch_id == i) for i in range(num_pitch)],
+                        "duration": [int(duration_id == j) for j in range(num_duration)],
+                    })
                     # Add position and tone data to input
-                    encoded_vector_inputs.append(
-                        [int(pitch_id == i) for i in range(num_pitch)] +
-                        [int(duration_id == j) for j in range(num_duration)] +
-                        [int(tone_id == k) for k in range(num_tone)] +
+                    bulk_append(onehot_vector_inputs, {
+                        "pitch": [int(pitch_id == i) for i in range(num_pitch)],
+                        "duration": [int(duration_id == j) for j in range(num_duration)],
+                        "tone": [int(tone_id == k) for k in range(num_tone)],
                         # Note position within a single bar
-                        [int(pos == k) for k in range(16)] +
+                        "pos_internal": [int(pos == k) for k in range(16)],
                         # Note position within 4-bar phrase
-                        [int((pos // 16) % 4 == k) for k in range(4)]
-                    )
+                        "pos_external": [int((pos // 16) % 4 == k) for k in range(4)],
+                    })
 
                 for i in range(no_of_inputs):
-                    inputs.append(encoded_vector_inputs[i:(i + SEQUENCE_LENGTH)])
-                    outputs.append(encoded_vector_outputs[i + SEQUENCE_LENGTH])
+                    bulk_append(inputs, { k: v[i:(i + SEQUENCE_LENGTH)] for k, v in onehot_vector_inputs.items() })
+                    bulk_append(outputs, { k: v[i + SEQUENCE_LENGTH] for k, v in onehot_vector_outputs.items() })
 
     print("\nFinished file processing.")
 
-    print(f"There are {len(inputs)} sequences.")
+    print(f"There are {len(inputs['pitch'])} sequences.")
 
-    inputs = np.array(inputs)
-    outputs = np.array(outputs)
+    inputs = { k: np.array(v) for k, v in inputs.items() }
+    outputs = { k: np.array(v) for k, v in outputs.items() }
 
     return inputs, outputs
 
