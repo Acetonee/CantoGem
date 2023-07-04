@@ -63,7 +63,7 @@ class MelodyGenerator:
 
             # choose semi-random note from probability distribution (pitch class, duration class)
             output_note = {
-                key: self._sample_with_temperature(probabilities[index][0], temperature)
+                key: self._sample_with_temperature(probabilities[index][0], temperature[key])
                 for index, key in enumerate(output_params)
             }
 
@@ -86,6 +86,8 @@ class MelodyGenerator:
             stream.append(m21_event)
 
         stream.write(format, file_name)
+        print(melody)
+        print ("Melody saved")
 
     def _sample_with_temperature(self, probabilities, temperature):
         # temperature -> infinity -> Homogenous distribution
@@ -105,10 +107,9 @@ if __name__ == "__main__":
     # tones = "4 6 6 1 2 1 2 2 9 3"  # After 9 3
     tones = "1 3 4 4 4 1 2 5 6 1 1 5 4 3 4 6 1 1 1 4 6 3 1 1 2 6 1 1 1 3 4 4 6 2 2 5 1 4 1 2"
     initial_note = {
-        "pitch": 60,
+        "pitch": 67,
         "duration": 4
     }
 
-    melody = mg.generate_melody(initial_note, tones, 1)
-    print(melody)
+    melody = mg.generate_melody(initial_note, tones, temperature={"pitch": 0.8, "duration": 1.3})
     mg.save_melody(melody)
