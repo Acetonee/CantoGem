@@ -12,13 +12,14 @@ SAVE_MODEL_PATH = "model.h5"
 
 
 def build_model():
-    input_params = ["pitch", "duration", "tone", "pos_internal", "pos_external"]
+    input_params = ["pitch", "duration", "current_tone", "next_tone", "pos_internal", "pos_external"]
     output_params = ["pitch", "duration"]
 
     shapes = {
         "pitch": num_pitch,
         "duration": num_duration,
-        "tone": num_tone,
+        "current_tone": num_tone,
+        "next_tone": num_tone,
         "pos_internal": num_bar_internal,
         "pos_external": num_bar_external,
     }
@@ -35,7 +36,7 @@ def build_model():
         inputs[type] = keras.layers.Dropout(0.2)(tmp)
 
     combined_input = keras.layers.concatenate(list(inputs.values()))
-    
+
     x = keras.layers.LSTM(512, return_sequences=True)(combined_input)
     x = keras.layers.Dropout(0.2)(x)
     x = keras.layers.LSTM(512)(x)
@@ -73,10 +74,12 @@ def train():
     # train the model
     # Create a callback that saves the model's weights
     cp_callback = keras.callbacks.ModelCheckpoint(filepath=SAVE_MODEL_PATH, verbose=0)
-    model.fit(list(inputs.values()), list(targets.values()), epochs=EPOCHS, batch_size=BATCH_SIZE, callbacks=[cp_callback])
+    model.fit(list(inputs.values()), list(targets.values()), epochs=EPOCHS, batch_size=BATCH_SIZE,
+              callbacks=[cp_callback])
 
     # save the model
     model.save(SAVE_MODEL_PATH)
+
 
 if __name__ == "__main__":
     train()

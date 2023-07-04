@@ -11,7 +11,7 @@ RAW_DATA_PATH = "rawdata"
 DATASET_PATH = "dataset"
 MAPPING_PATH = "mappings"
 SEQUENCE_LENGTH = 16
-
+END_TONE = 10
 
 ACCEPTABLE_DURATIONS = [
     0.25,
@@ -35,7 +35,7 @@ with open(os.path.join(MAPPING_PATH, "duration_mapping.json"), "r") as duration_
 # Determine the number of unique names and values
 num_pitch = len(pitch_to_id)
 num_duration = len(duration_to_id)
-num_tone = 10
+num_tone = 11
 num_bar_internal = 16
 num_bar_external = 4
 
@@ -108,7 +108,6 @@ def transpose(song):
 
 
 def encode_song(song, time_step=0.25):
-
     elements = []
     current_note = {"pitch": None, "duration": None, "tone": None}
 
@@ -150,7 +149,6 @@ def get_tone(word):
 
 
 def create_mapping(encoded_song):
-
     unique_pitches = set([element["pitch"] for element in encoded_song])
     unique_durations = set([element["duration"] for element in encoded_song])
 
@@ -164,9 +162,11 @@ def create_mapping(encoded_song):
     with open(os.path.join(MAPPING_PATH, "duration_mapping.json"), "w") as duration_file:
         json.dump(duration_to_id, duration_file, indent=4)
 
-def bulk_append(dictList, new_dict):
+
+def bulk_append(dict_list, new_dict):
     for key, val in new_dict.items():
-        dictList[key].append(val)
+        dict_list[key].append(val)
+
 
 def generating_training_sequences(dataset_path=DATASET_PATH):
     # Give the network 4 bars of notes (64 time steps) and 4 bar of tones, with the tone that the target has
@@ -174,7 +174,8 @@ def generating_training_sequences(dataset_path=DATASET_PATH):
     inputs = {
         "pitch": [],
         "duration": [],
-        "tone": [],
+        "current_tone": [],
+        "next_tone": [],
         "pos_internal": [],
         "pos_external": [],
     }
@@ -197,7 +198,8 @@ def generating_training_sequences(dataset_path=DATASET_PATH):
                 onehot_vector_inputs = {
                     "pitch": [],
                     "duration": [],
-                    "tone": [],
+                    "current_tone": [],
+                    "next_tone": [],
                     "pos_internal": [],
                     "pos_external": [],
                 }
@@ -205,13 +207,14 @@ def generating_training_sequences(dataset_path=DATASET_PATH):
                     "pitch": [],
                     "duration": [],
                 }
-                for element in data:
+                for index, element in enumerate(data):
                     pitch = int(element["pitch"])
                     duration = int(element["duration"])
 
                     pitch_id = pitch_to_id[str(pitch)]
                     duration_id = duration_to_id[str(duration)]
-                    tone_id = int(element["tone"])  # Tone no need mapping
+                    current_tone_id = int(element["tone"])  # Tone no need mapping
+                    next_tone_id = END_TONE if index + 1 >= len(data) else int(data[index + 1]["tone"])
 
                     pos = (pos + duration) % 64
                     # Create a list of one-hot encoded vectors for each element
@@ -219,11 +222,13 @@ def generating_training_sequences(dataset_path=DATASET_PATH):
                         "pitch": [int(pitch_id == i) for i in range(num_pitch)],
                         "duration": [int(duration_id == j) for j in range(num_duration)],
                     })
+
                     # Add position and tone data to input
                     bulk_append(onehot_vector_inputs, {
                         "pitch": [int(pitch_id == i) for i in range(num_pitch)],
                         "duration": [int(duration_id == j) for j in range(num_duration)],
-                        "tone": [int(tone_id == k) for k in range(num_tone)],
+                        "current_tone": [int(current_tone_id == k) for k in range(num_tone)],
+                        "next_tone": [int(next_tone_id == k) for k in range(num_tone)],
                         # Note position within a single bar
                         "pos_internal": [int(pos == k) for k in range(16)],
                         # Note position within 4-bar phrase
@@ -231,15 +236,15 @@ def generating_training_sequences(dataset_path=DATASET_PATH):
                     })
 
                 for i in range(no_of_inputs):
-                    bulk_append(inputs, { k: v[i:(i + SEQUENCE_LENGTH)] for k, v in onehot_vector_inputs.items() })
-                    bulk_append(outputs, { k: v[i + SEQUENCE_LENGTH] for k, v in onehot_vector_outputs.items() })
+                    bulk_append(inputs, {k: v[i:(i + SEQUENCE_LENGTH)] for k, v in onehot_vector_inputs.items()})
+                    bulk_append(outputs, {k: v[i + SEQUENCE_LENGTH] for k, v in onehot_vector_outputs.items()})
 
     print("\nFinished file processing.")
 
     print(f"There are {len(inputs['pitch'])} sequences.")
 
-    inputs = { k: np.array(v) for k, v in inputs.items() }
-    outputs = { k: np.array(v) for k, v in outputs.items() }
+    inputs = {k: np.array(v) for k, v in inputs.items()}
+    outputs = {k: np.array(v) for k, v in outputs.items()}
 
     return inputs, outputs
 
