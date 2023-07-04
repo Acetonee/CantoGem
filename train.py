@@ -1,4 +1,5 @@
-from preprocess import generating_training_sequences, num_pitch, num_duration, num_tone, num_bar_internal, num_bar_external
+from preprocess import generating_training_sequences
+from preprocess import num_pitch, num_duration, num_tone, num_bar_internal, num_bar_external
 
 from tensorflow import keras
 
