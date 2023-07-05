@@ -1,4 +1,4 @@
-from tensorflow import keras, concat as onehot_concat
+from tensorflow import keras
 
 import numpy as np
 import music21 as m21
@@ -57,7 +57,7 @@ class MelodyGenerator:
         # create seed with start symbols
         current_melody = [ first_note ]
 
-        for _ in all_tones:
+        for _ in range(len(all_tones) - 1):
             # create seed with start symbols
             onehot_seed = self.onehot_input_from_seed(current_melody, all_tones)
 
@@ -114,5 +114,5 @@ if __name__ == "__main__":
         "duration": 4
     }
 
-    melody = mg.generate_melody(initial_note, tones, temperature={"pitch": 0.8, "duration": 1.3})
+    melody = mg.generate_melody(initial_note, tones, temperature={"pitch": 0.8, "duration": 1})
     mg.save_melody(melody)
