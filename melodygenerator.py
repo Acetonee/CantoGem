@@ -2,6 +2,7 @@ from tensorflow import keras
 
 import numpy as np
 import music21 as m21
+from typing import Dict
 
 from preprocess import END_TONE
 from preprocess import pitch_to_id, duration_to_id
@@ -18,6 +19,9 @@ class MelodyGenerator:
     def onehot_input_from_seed(self, data, tones):
         onehot_input = list(map(lambda _: [], input_params))
         pos = 0
+        rest_indices = [i for i, element in enumerate(tones) if element == 0]
+
+
         for index, element in enumerate(data):
             pitch = int(element["pitch"])
             duration = int(element["duration"])
@@ -28,11 +32,23 @@ class MelodyGenerator:
             next_tone_id = END_TONE if index + 1 >= len(tones) else tones[index + 1]
 
             pos = (pos + duration) % 64
-            
-            until_end = len(tones) - index - 1
+
+            if index in rest_indices:
+                when_rest = 0
+            else:
+                # current note is not a rest note
+                rest_indices_after = [i for i in rest_indices if i > index]
+                if len(rest_indices_after) > 0:
+                    # there is at least one rest note after the current note
+                    next_rest_index = min(rest_indices_after)
+                    when_rest = next_rest_index - index
+                else:
+                    # there are no rest notes after the current note
+                    when_rest = len(tones) - index - 1
+
             # Create a list of one-hot encoded vectors for each element
             # Add position and tone data to input
-            single_input: dict[str, int] = {
+            single_input: Dict[str, int] = {
                 "pitch": pitch_id,
                 "duration": duration_id,
                 "current_tone": current_tone_id,
@@ -41,7 +57,7 @@ class MelodyGenerator:
                 "pos_internal": pos % 16,
                 # Note position within 4-bar phrase
                 "pos_external": (pos // 16) % 4,
-                "when_end": until_end,
+                "when_rest": when_rest
             }
 
             for i, key in enumerate(input_params):
@@ -53,9 +69,9 @@ class MelodyGenerator:
     def generate_melody(self, first_note, all_tones, temperature):
 
         all_tones = list(map(lambda x: int(x), all_tones.split()))
-        
+
         # create seed with start symbols
-        current_melody = [ first_note ]
+        current_melody = [first_note]
 
         for _ in range(len(all_tones) - 1):
             # create seed with start symbols
@@ -90,7 +106,7 @@ class MelodyGenerator:
 
         stream.write(format, file_name)
         print(melody)
-        print ("Melody saved")
+        print("Melody saved")
 
     def _sample_with_temperature(self, probabilities, temperature):
         # temperature -> infinity -> Homogenous distribution
@@ -108,11 +124,11 @@ class MelodyGenerator:
 if __name__ == "__main__":
     mg = MelodyGenerator()
     # tones = "4 6 6 1 2 1 2 2 9 3"  # After 9 3
-    tones = "1 3 4 4 4 1 2 5 6 1 1 5 4 3 4 6 1 1 1 4 6 3 1 1 2 6 1 1 1 3 4 4 6 2 2 5 1 4 1 2"
+    tones = "1 3 4 0 4 4 1 2 5 6 1 0 1 5 4 0 3 4 6 1 1 1 0 4 6 3 1 0 1 2 6 1 1 1 0 3 4 4 6 2 2 5 1 4 1 2"
     initial_note = {
-        "pitch": 67,
+        "pitch": 65,
         "duration": 4
     }
 
-    melody = mg.generate_melody(initial_note, tones, temperature={"pitch": 0.8, "duration": 1})
+    melody = mg.generate_melody(initial_note, tones, temperature={"pitch": 0.1, "duration": 0.1})
     mg.save_melody(melody)

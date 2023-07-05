@@ -1,7 +1,9 @@
 from preprocess import generating_training_sequences
 from preprocess import input_params, output_params, param_shapes
-
 from tensorflow import keras
+
+import tensorflow as tf
+import matplotlib.pyplot as plt
 
 INPUT_UNITS = 50
 OUTPUT_UNITS = 30
@@ -9,6 +11,7 @@ LEARNING_RATE = 0.001
 EPOCHS = 90
 BATCH_SIZE = 16
 SAVE_MODEL_PATH = "model.h5"
+PLOT_PATH = "./training_plot.png"
 
 
 def build_model():
@@ -53,6 +56,8 @@ def build_model():
 def train():
     loadFromExist = input("Load model from existing? (Y/N) ").lower() == "y"
     print("Continuing training session." if loadFromExist else "Creating new model.")
+    print("Num GPUs Available: ", len(tf.config.list_physical_devices('GPU')))
+
     # generate the training sequences
     inputs, targets = generating_training_sequences()
 
@@ -63,7 +68,7 @@ def train():
     # Create a callback that saves the model's weights
     cp_callback = keras.callbacks.ModelCheckpoint(filepath=SAVE_MODEL_PATH, verbose=0)
     model.fit(list(inputs.values()), list(targets.values()), epochs=EPOCHS, batch_size=BATCH_SIZE,
-              callbacks=[cp_callback])
+                        callbacks=[cp_callback])
 
     # save the model
     model.save(SAVE_MODEL_PATH)

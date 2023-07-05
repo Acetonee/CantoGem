@@ -41,9 +41,9 @@ num_duration = len(duration_to_id)
 num_tone = 11
 num_pos_internal = 16
 num_pos_external = 4
-num_when_end = 8
+num_when_rest = 8
 
-input_params = ("pitch", "duration", "current_tone", "next_tone", "pos_internal", "pos_external", "when_end")
+input_params = ("pitch", "duration", "current_tone", "next_tone", "pos_internal", "pos_external", "when_rest")
 output_params = ("pitch", "duration")
 
 param_shapes = {
@@ -53,7 +53,7 @@ param_shapes = {
     "next_tone": num_tone,
     "pos_internal": num_pos_internal,
     "pos_external": num_pos_external,
-    "when_end": num_when_end,
+    "when_rest": num_when_rest,
 }
 
 
@@ -195,7 +195,7 @@ def generating_training_sequences(dataset_path=DATASET_PATH):
         "next_tone": [],
         "pos_internal": [],
         "pos_external": [],
-        "when_end": [],
+        "when_rest": []
     }
     outputs = {
         "pitch": [],
@@ -207,7 +207,7 @@ def generating_training_sequences(dataset_path=DATASET_PATH):
             if filename == '.DS_Store':
                 continue
 
-            stdout.write(f"\rProcessing {filename}   ({fileId + 1} / {len(files)})     ")
+            stdout.write(f"\rProcessing {filename}   ({fileId + 1} / {len(files)})")
             stdout.flush()
             with open(os.path.join(path, filename)) as file:
                 data = json.load(file)
@@ -220,7 +220,7 @@ def generating_training_sequences(dataset_path=DATASET_PATH):
                     "next_tone": [],
                     "pos_internal": [],
                     "pos_external": [],
-                    "when_end": [],
+                    "when_rest": []
                 }
                 onehot_vector_outputs = {
                     "pitch": [],
@@ -229,6 +229,7 @@ def generating_training_sequences(dataset_path=DATASET_PATH):
                 for index, element in enumerate(data):
                     pitch = int(element["pitch"])
                     duration = int(element["duration"])
+                    rest_indices = [i for i, element in enumerate(data) if int(element["pitch"]) == 0]
 
                     pitch_id = pitch_to_id[str(pitch)]
                     duration_id = duration_to_id[str(duration)]
@@ -236,7 +237,20 @@ def generating_training_sequences(dataset_path=DATASET_PATH):
                     next_tone_id = END_TONE if index + 1 >= len(data) else int(data[index + 1]["tone"])
 
                     pos = (pos + duration) % 64
-                    until_end = len(data) - index - 1
+
+                    if index in rest_indices:
+                        when_rest = 0
+                    else:
+                        # current note is not a rest note
+                        rest_indices_after = [i for i in rest_indices if i > index]
+                        if len(rest_indices_after) > 0:
+                            # there is at least one rest note after the current note
+                            next_rest_index = min(rest_indices_after)
+                            when_rest = next_rest_index - index
+                        else:
+                            # there are no rest notes after the current note
+                            when_rest = len(data) - index - 1
+
                     # Create a list of one-hot encoded vectors for each element
                     bulk_append(onehot_vector_outputs, {
                         "pitch": [int(pitch_id == i) for i in range(num_pitch)],
@@ -253,7 +267,7 @@ def generating_training_sequences(dataset_path=DATASET_PATH):
                         "pos_internal": [int(pos % 16 == k) for k in range(num_pos_internal)],
                         # Note position within 4-bar phrase
                         "pos_external": [int((pos // 16) % 4 == k) for k in range(num_pos_external)],
-                        "when_end": [int(until_end == k) for k in range(num_when_end)],
+                        "when_rest": [int(when_rest == k) for k in range(num_when_rest)],
                     })
 
                 for i in range(no_of_inputs):
