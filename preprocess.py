@@ -43,18 +43,17 @@ num_pos_internal = 16
 num_pos_external = 4
 num_when_rest = 8
 
-input_params = ("pitch", "duration", "current_tone", "next_tone", "pos_internal", "pos_external", "when_rest")
+input_params = ("pitch", "duration") + tuple(["tone_" + str(i) for i in range(8)]) + ("pos_internal", "pos_external")
 output_params = ("pitch", "duration")
 
 param_shapes = {
     "pitch": num_pitch,
     "duration": num_duration,
-    "current_tone": num_tone,
-    "next_tone": num_tone,
     "pos_internal": num_pos_internal,
     "pos_external": num_pos_external,
-    "when_rest": num_when_rest,
 }
+for i in range(8):
+    param_shapes["tone_" + str(i)] = num_tone
 
 
 def create_datasets_and_mapping(raw_data_path, save_dir):
@@ -188,19 +187,8 @@ def bulk_append(dict_list, new_dict):
 def generating_training_sequences(dataset_path=DATASET_PATH):
     # Give the network 4 bars of notes (64 time steps) and 4 bar of tones, with the tone that the target has
 
-    inputs = {
-        "pitch": [],
-        "duration": [],
-        "current_tone": [],
-        "next_tone": [],
-        "pos_internal": [],
-        "pos_external": [],
-        "when_rest": []
-    }
-    outputs = {
-        "pitch": [],
-        "duration": [],
-    }
+    inputs = { k: [] for k in input_params }
+    outputs = { k: [] for k in output_params }
 
     for path, _, files in os.walk(dataset_path):
         for fileId, filename in enumerate(files):
@@ -213,43 +201,28 @@ def generating_training_sequences(dataset_path=DATASET_PATH):
                 data = json.load(file)
                 no_of_inputs = len(data) - SEQUENCE_LENGTH
                 pos = 0
-                onehot_vector_inputs = {
-                    "pitch": [],
-                    "duration": [],
-                    "current_tone": [],
-                    "next_tone": [],
-                    "pos_internal": [],
-                    "pos_external": [],
-                    "when_rest": []
-                }
-                onehot_vector_outputs = {
-                    "pitch": [],
-                    "duration": [],
-                }
+                onehot_vector_inputs = { k: [] for k in input_params }
+                onehot_vector_outputs = { k: [] for k in output_params }
                 for index, element in enumerate(data):
                     pitch = int(element["pitch"])
                     duration = int(element["duration"])
-                    rest_indices = [i for i, element in enumerate(data) if int(element["pitch"]) == 0]
 
                     pitch_id = pitch_to_id[str(pitch)]
                     duration_id = duration_to_id[str(duration)]
-                    current_tone_id = int(element["tone"])  # Tone no need mapping
-                    next_tone_id = END_TONE if index + 1 >= len(data) else int(data[index + 1]["tone"])
 
                     pos = (pos + duration) % 64
 
-                    if index in rest_indices:
-                        when_rest = 0
-                    else:
-                        # current note is not a rest note
-                        rest_indices_after = [i for i in rest_indices if i > index]
-                        if len(rest_indices_after) > 0:
-                            # there is at least one rest note after the current note
-                            next_rest_index = min(rest_indices_after)
-                            when_rest = next_rest_index - index
-                        else:
-                            # there are no rest notes after the current note
-                            when_rest = len(data) - index - 1
+                    single_input = {
+                        "pitch": [int(pitch_id == i) for i in range(num_pitch)],
+                        "duration": [int(duration_id == j) for j in range(num_duration)],
+                        # Note position within a single bar
+                        "pos_internal": [int(pos % 16 == k) for k in range(num_pos_internal)],
+                        # Note position within 4-bar phrase
+                        "pos_external": [int((pos // 16) % 4 == k) for k in range(num_pos_external)],
+                    }
+
+                    for i in range(8):
+                        single_input["tone_" + str(i)] = [int((END_TONE if index + i >= len(data) else int(data[index + i]["tone"])) == k) for k in range(num_tone)]
 
                     # Create a list of one-hot encoded vectors for each element
                     bulk_append(onehot_vector_outputs, {
@@ -257,18 +230,7 @@ def generating_training_sequences(dataset_path=DATASET_PATH):
                         "duration": [int(duration_id == j) for j in range(num_duration)],
                     })
 
-                    # Add position and tone data to input
-                    bulk_append(onehot_vector_inputs, {
-                        "pitch": [int(pitch_id == i) for i in range(num_pitch)],
-                        "duration": [int(duration_id == j) for j in range(num_duration)],
-                        "current_tone": [int(current_tone_id == k) for k in range(num_tone)],
-                        "next_tone": [int(next_tone_id == k) for k in range(num_tone)],
-                        # Note position within a single bar
-                        "pos_internal": [int(pos % 16 == k) for k in range(num_pos_internal)],
-                        # Note position within 4-bar phrase
-                        "pos_external": [int((pos // 16) % 4 == k) for k in range(num_pos_external)],
-                        "when_rest": [int(when_rest == k) for k in range(num_when_rest)],
-                    })
+                    bulk_append(onehot_vector_inputs, single_input)
 
                 for i in range(no_of_inputs):
                     bulk_append(inputs, {k: v[i:(i + SEQUENCE_LENGTH)] for k, v in onehot_vector_inputs.items()})

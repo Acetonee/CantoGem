@@ -7,7 +7,7 @@ from typing import Dict
 from preprocess import END_TONE
 from preprocess import pitch_to_id, duration_to_id
 from preprocess import id_to_pitch, id_to_duration
-from preprocess import input_params, output_params, param_shapes
+from preprocess import input_params, output_params, param_shapes, num_tone
 
 
 class MelodyGenerator:
@@ -19,7 +19,6 @@ class MelodyGenerator:
     def onehot_input_from_seed(self, data, tones):
         onehot_input = list(map(lambda _: [], input_params))
         pos = 0
-        rest_indices = [i for i, element in enumerate(tones) if element == 0]
 
 
         for index, element in enumerate(data):
@@ -28,40 +27,26 @@ class MelodyGenerator:
 
             pitch_id = pitch_to_id[str(pitch)]
             duration_id = duration_to_id[str(duration)]
-            current_tone_id = tones[index]  # Tone no need mapping
-            next_tone_id = END_TONE if index + 1 >= len(tones) else tones[index + 1]
 
             pos = (pos + duration) % 64
-
-            if index in rest_indices:
-                when_rest = 0
-            else:
-                # current note is not a rest note
-                rest_indices_after = [i for i in rest_indices if i > index]
-                if len(rest_indices_after) > 0:
-                    # there is at least one rest note after the current note
-                    next_rest_index = min(rest_indices_after)
-                    when_rest = next_rest_index - index
-                else:
-                    # there are no rest notes after the current note
-                    when_rest = len(tones) - index - 1
 
             # Create a list of one-hot encoded vectors for each element
             # Add position and tone data to input
             single_input: Dict[str, int] = {
                 "pitch": pitch_id,
                 "duration": duration_id,
-                "current_tone": current_tone_id,
-                "next_tone": next_tone_id,
                 # Note position within a single bar
                 "pos_internal": pos % 16,
                 # Note position within 4-bar phrase
-                "pos_external": (pos // 16) % 4,
-                "when_rest": when_rest
+                "pos_external": (pos // 16) % 4
             }
+
+            for i in range(8):
+                single_input["tone_" + str(i)] = END_TONE if index + i >= len(tones) else int(tones[index + i])
 
             for i, key in enumerate(input_params):
                 onehot_input[i].append([int(single_input[key] == k) for k in range(param_shapes[key])])
+
         for i, onehot_vectors in enumerate(onehot_input):
             onehot_input[i] = np.array(onehot_vectors)[np.newaxis, ...]
         return onehot_input
