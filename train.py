@@ -24,15 +24,15 @@ def build_model():
     for type in input_params:
         input_layers[type] = keras.layers.Input(shape=(None, param_shapes[type]))
         tmp = keras.layers.LSTM(param_shapes[type], return_sequences=True)(input_layers[type])
-        inputs[type] = keras.layers.Dropout(0.2)(tmp)
+        inputs[type] = keras.layers.Dropout(0.4)(tmp)
 
     combined_input = keras.layers.concatenate(list(inputs.values()))
 
     x = keras.layers.LSTM(512, return_sequences=True)(combined_input)
-    x = keras.layers.Dropout(0.2)(x)
+    x = keras.layers.Dropout(0.4)(x)
     x = keras.layers.LSTM(512)(x)
     x = keras.layers.BatchNormalization()(x)
-    x = keras.layers.Dropout(0.2)(x)
+    x = keras.layers.Dropout(0.3)(x)
     x = keras.layers.Dense(256, activation="relu")(x)
 
     for type in output_params:
