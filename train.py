@@ -10,7 +10,7 @@ OUTPUT_UNITS = 30
 LEARNING_RATE = 0.001
 EPOCHS = 90
 BATCH_SIZE = 16
-SAVE_MODEL_PATH = "model.h5"
+SAVE_MODEL_PATH = "model_weights.ckpt"
 PLOT_PATH = "./training_plot.png"
 
 
@@ -39,7 +39,8 @@ def build_model():
     tmp = keras.layers.BatchNormalization()(tmp)
     tmp = keras.layers.Dropout(0.2)(tmp)
     outputs["pitch"] = keras.layers.Dense(param_shapes["pitch"], activation="softmax", name="pitch")(tmp)
-    tmp = keras.layers.Dense(128, activation="relu")(keras.layers.concatenate([x, outputs["pitch"]]))
+    tmp = keras.layers.Dropout(0.8)(outputs["pitch"])
+    tmp = keras.layers.Dense(128, activation="relu")(keras.layers.concatenate([x, tmp]))
     tmp = keras.layers.BatchNormalization()(tmp)
     tmp = keras.layers.Dropout(0.2)(tmp)
     outputs["duration"] = keras.layers.Dense(param_shapes["duration"], activation="softmax", name="dur.")(tmp)
@@ -50,8 +51,6 @@ def build_model():
     model.compile(loss="categorical_crossentropy",
                   optimizer=keras.optimizers.Adam(learning_rate=LEARNING_RATE),
                   metrics=["accuracy"])
-
-    model.summary()
 
     return model
 
@@ -65,16 +64,18 @@ def train():
     inputs, targets = generating_training_sequences()
 
     # build the network
-    model = keras.models.load_model("./model.h5") if loadFromExist else build_model()
+    model = build_model()
+    if loadFromExist:
+        model.load_weights(SAVE_MODEL_PATH)
 
     # train the model
     # Create a callback that saves the model's weights
-    cp_callback = keras.callbacks.ModelCheckpoint(filepath=SAVE_MODEL_PATH, verbose=0)
+    cp_callback = keras.callbacks.ModelCheckpoint(filepath=SAVE_MODEL_PATH, verbose=0, save_weights_only=True)
     model.fit(list(inputs.values()), list(targets.values()), epochs=EPOCHS, batch_size=BATCH_SIZE,
                         callbacks=[cp_callback])
 
     # save the model
-    model.save(SAVE_MODEL_PATH)
+    model.save_weights(SAVE_MODEL_PATH)
 
 
 if __name__ == "__main__":

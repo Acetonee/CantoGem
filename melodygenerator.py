@@ -9,12 +9,15 @@ from preprocess import pitch_to_id, duration_to_id
 from preprocess import id_to_pitch, id_to_duration
 from preprocess import input_params, output_params, param_shapes, num_tone
 
+from train import SAVE_MODEL_PATH, build_model
+
 
 class MelodyGenerator:
 
-    def __init__(self, model_path="model.h5"):
+    def __init__(self, model_path=SAVE_MODEL_PATH):
         self.model_path = model_path
-        self.model = keras.models.load_model(model_path)
+        self.model = build_model()
+        self.model.load_weights(SAVE_MODEL_PATH).expect_partial()
 
     def onehot_input_from_seed(self, data, tones):
         onehot_input = list(map(lambda _: [], input_params))
@@ -111,9 +114,9 @@ if __name__ == "__main__":
     # tones = "4 6 6 1 2 1 2 2 9 3"  # After 9 3
     tones = "1 3 4 0 4 4 1 2 5 6 1 0 1 5 4 0 3 4 6 1 1 1 0 4 6 3 1 0 1 2 6 1 1 1 0 3 4 4 6 2 2 5 1 4 1 2"
     initial_note = {
-        "pitch": 60,
+        "pitch": 67,
         "duration": 4
     }
 
-    melody = mg.generate_melody(initial_note, tones, temperature={"pitch": 1.0, "duration": 0.5})
+    melody = mg.generate_melody(initial_note, tones, temperature={"pitch": 0.1, "duration": 0.1})
     mg.save_melody(melody)
