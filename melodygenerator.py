@@ -111,9 +111,9 @@ if __name__ == "__main__":
     # tones = "4 6 6 1 2 1 2 2 9 3"  # After 9 3
     tones = "1 3 4 0 4 4 1 2 5 6 1 0 1 5 4 0 3 4 6 1 1 1 0 4 6 3 1 0 1 2 6 1 1 1 0 3 4 4 6 2 2 5 1 4 1 2"
     initial_note = {
-        "pitch": 67,
+        "pitch": 60,
         "duration": 4
     }
 
-    melody = mg.generate_melody(initial_note, tones, temperature={"pitch": 0.1, "duration": 0.1})
+    melody = mg.generate_melody(initial_note, tones, temperature={"pitch": 1.0, "duration": 0.5})
     mg.save_melody(melody)

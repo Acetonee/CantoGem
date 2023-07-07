@@ -35,11 +35,14 @@ def build_model():
     x = keras.layers.Dropout(0.3)(x)
     x = keras.layers.Dense(256, activation="relu")(x)
 
-    for type in output_params:
-        tmp = keras.layers.Dense(128, activation="relu")(x)
-        tmp = keras.layers.BatchNormalization()(tmp)
-        tmp = keras.layers.Dropout(0.2)(tmp)
-        outputs[type] = keras.layers.Dense(param_shapes[type], activation="softmax", name=type)(tmp)
+    tmp = keras.layers.Dense(128, activation="relu")(x)
+    tmp = keras.layers.BatchNormalization()(tmp)
+    tmp = keras.layers.Dropout(0.2)(tmp)
+    outputs["pitch"] = keras.layers.Dense(param_shapes["pitch"], activation="softmax", name="pitch")(tmp)
+    tmp = keras.layers.Dense(128, activation="relu")(keras.layers.concatenate([x, outputs["pitch"]]))
+    tmp = keras.layers.BatchNormalization()(tmp)
+    tmp = keras.layers.Dropout(0.2)(tmp)
+    outputs["duration"] = keras.layers.Dense(param_shapes["duration"], activation="softmax", name="dur.")(tmp)
 
     model = keras.Model(list(inputs.values()), list(outputs.values()))
 
