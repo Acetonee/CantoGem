@@ -1,3 +1,4 @@
+import math
 from tensorflow import keras
 
 import numpy as np
@@ -70,7 +71,7 @@ class MelodyGenerator:
 
             # choose semi-random note from probability distribution (pitch class, duration class)
             output_note = {
-                key: self._sample_with_temperature(probabilities[index][0], temperature[key])
+                key: self._sample_with_temperature(probabilities[index][0], temperature[key]((_ + 1) / len(all_tones)))
                 for index, key in enumerate(output_params)
             }
 
@@ -108,15 +109,22 @@ class MelodyGenerator:
 
         return index
 
+def get_bell_sigmoid(min_val, max_val, roughness):
+    k = (max_val - min_val) * (1 + math.exp(-roughness / 6)) / (1 - math.exp(-roughness / 6))
+    return lambda x: k/(1 + math.exp(roughness * (1/3 - x))) + k/(1+math.exp(roughness * (x - 2/3))) - k + min_val
 
 if __name__ == "__main__":
     mg = MelodyGenerator()
     # tones = "4 6 6 1 2 1 2 2 9 3"  # After 9 3
     tones = "1 3 4 0 4 4 1 2 5 6 1 0 1 5 4 0 3 4 6 1 1 1 0 4 6 3 1 0 1 2 6 1 1 1 0 3 4 4 6 2 2 5 1 4 1 2"
     initial_note = {
-        "pitch": 67,
+        "pitch": 60,
         "duration": 4
     }
 
-    melody = mg.generate_melody(initial_note, tones, temperature={"pitch": 0.1, "duration": 0.1})
+    melody = mg.generate_melody(initial_note, tones, temperature={
+        # temperature
+        "pitch": get_bell_sigmoid(min_val=0.1, max_val=0.4, roughness=20),
+        "duration": get_bell_sigmoid(min_val=0.05, max_val=0.3, roughness=10)
+    })
     mg.save_melody(melody)
