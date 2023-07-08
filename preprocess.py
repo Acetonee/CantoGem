@@ -1,28 +1,17 @@
 import os
 import json
-import string
+from sys import stdout
+from time import sleep
 
 import music21 as m21
 import numpy as np
-import tensorflow as tf
 import pycantonese as pc
 
 RAW_DATA_PATH = "rawdata"
-SAVE_DIR = "dataset"
-SINGLE_SONGS_FILE_DATASET = "file_song_dataset"
-SINGLE_LYRICS_FILE_DATASET = "file_lyrics_dataset"
-
-MAPPING_PATH = "mapping.json"
-SEQUENCE_LENGTH = 64
-
-# TODO: Experiment with pitches
-# TONE_MAPPING = {'r': 0, '_': 0, '1': 4, '2': 4, '3': 3, '4': 1, '5': 3, '6': 2, '7': 4, '8': 3, '9': 2, '/': 5}
-# TONE_MAPPING_SIZE = 6
-
-TONE_MAPPING = {'0': 0, '1': 1, '2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9, '/': 10}
-TONE_MAPPING_SIZE = 11  # CHANGE WHEN NECESSARY
-
-NOTE_MAPPING_SIZE = 25  # CHANGE WHEN NECESSARY
+DATASET_PATH = "dataset"
+MAPPING_PATH = "mappings"
+SEQUENCE_LENGTH = 16
+END_TONE = 10
 
 ACCEPTABLE_DURATIONS = [
     0.25,
@@ -35,31 +24,62 @@ ACCEPTABLE_DURATIONS = [
     4
 ]
 
+pitch_to_id = dict()
+duration_to_id = dict()
+with open(os.path.join(MAPPING_PATH, "pitch_mapping.json"), "r") as pitch_file:
+    pitch_to_id = json.load(pitch_file)
 
-def create_datasets(dataset_path):
+with open(os.path.join(MAPPING_PATH, "duration_mapping.json"), "r") as duration_file:
+    duration_to_id = json.load(duration_file)
+
+id_to_pitch = { v: int(k) for k, v in pitch_to_id.items() }
+id_to_duration = { v: int(k) for k, v in duration_to_id.items() }
+
+# Determine the number of unique names and values
+num_pitch = len(pitch_to_id)
+num_duration = len(duration_to_id)
+num_tone = 11
+num_pos_internal = 16
+num_pos_external = 4
+num_when_rest = 8
+
+input_params = ("pitch", "duration") + tuple(["tone_" + str(i) for i in range(8)]) + ("pos_internal", "pos_external")
+output_params = ("pitch", "duration")
+
+param_shapes = {
+    "pitch": num_pitch,
+    "duration": num_duration,
+    "pos_internal": num_pos_internal,
+    "pos_external": num_pos_external,
+}
+for i in range(8):
+    param_shapes["tone_" + str(i)] = num_tone
+
+
+def create_datasets_and_mapping(raw_data_path, save_dir):
     # load the songs
     print("Loading songs...")
-    songs = load_songs(dataset_path)
+    songs = load_songs(raw_data_path)
     print(f"Loaded {len(songs)} songs.")
 
-    for i, song in enumerate(songs):
+    encoded_songs_combined = []
 
-        # filter out songs
+    for i, song in enumerate(songs):
         if not has_acceptable_duration(song, ACCEPTABLE_DURATIONS):
             continue
 
         song = transpose(song)
-
-        # encode songs with music time series representation
         encoded_song = encode_song(song)
-        encoded_lyrics = encode_lyrics(song)
 
-        # save songs to a text file
-        save_path = os.path.join(SAVE_DIR, str(i))
-        with open(save_path, "w") as fp:
-            fp.write(encoded_song)
-            fp.write("\n")
-            fp.write(encoded_lyrics)
+        if encoded_songs_combined is None:
+            encoded_songs_combined = encoded_song.copy()
+        else:
+            encoded_songs_combined += encoded_song
+
+        with open(os.path.join(save_dir, str(i) + ".json"), "w") as fp:
+            json.dump(encoded_song, fp, indent=4)
+
+    create_mapping(encoded_songs_combined)
 
 
 def load_songs(dataset_path):
@@ -104,250 +124,130 @@ def transpose(song):
 
 
 def encode_song(song, time_step=0.25):
-    encoded_song = []
-
-    for event in song.flat.notesAndRests:
-        # e.g. (C, 1), (D, 0.5) -> [60, "_", "_", "_", 62, "_", "_"]
-
-        if isinstance(event, m21.note.Note):
-            if event.tie is not None and event.tie.type == 'stop':
-                symbol = "_"
-            else:
-                symbol = event.pitch.midi
-        elif isinstance(event, m21.note.Rest):
-            symbol = "r"
-
-        steps = int(event.duration.quarterLength / time_step)
-
-        for step in range(steps):
-            if step == 0:
-                encoded_song.append(symbol)
-            else:
-                encoded_song.append("_")
-
-    # cast list to str
-    encoded_song = " ".join(map(str, encoded_song))
-
-    return encoded_song
-
-
-# Change words to tones
-def encode_lyrics(song, time_step=0.25):
-    encoded_lyrics = []
-    previous_lyric = ""
-    symbol_lyric = ""
-    first_lyric = ""
+    elements = []
+    current_note = {"pitch": None, "duration": None, "tone": None}
 
     for event in song.flat.notesAndRests:
         if isinstance(event, m21.note.Note):
-            first_lyric = get_tone(event.lyric)
-            break
+            if current_note["pitch"] is None:
+                current_note["pitch"] = event.pitch.midi
+                current_note["duration"] = event.duration.quarterLength
+                current_note["tone"] = get_tone(event.lyric)
 
-    for event in song.flat.notesAndRests:
+            elif current_note["pitch"] == event.pitch.midi and event.tie is not None:
+                current_note["duration"] += event.duration.quarterLength
+                # No need add tone because the note before the tie must have the same tone
 
-        if isinstance(event, m21.note.Note):
-            if event.tie is not None and event.tie.type == 'stop':
-                symbol_lyric = previous_lyric
             else:
-                if event.lyric is None or all(c in string.ascii_letters for c in event.lyric):
-                    # Handle errors
-                    symbol_lyric = "0"
-                else:
-                    symbol_lyric = get_tone(event.lyric)
-                    previous_lyric = symbol_lyric
+                elements.append({"pitch": current_note["pitch"], "duration": int(current_note["duration"] / time_step),
+                                 "tone": current_note["tone"]})
+                current_note["pitch"] = event.pitch.midi
+                current_note["duration"] = event.duration.quarterLength
+                current_note["tone"] = get_tone(event.lyric)
 
         elif isinstance(event, m21.note.Rest):
-            if previous_lyric == "":
-                symbol_lyric = first_lyric
-                previous_lyric = symbol_lyric
+            if current_note["pitch"] is not None:
+                elements.append({"pitch": current_note["pitch"], "duration": int(current_note["duration"] / time_step),
+                                 "tone": current_note["tone"]})
+                current_note = {"pitch": None, "duration": None, "tone": None}
+            elements.append({"pitch": 0, "duration": int(event.duration.quarterLength / time_step), "tone": 0})
 
-        steps = int(event.duration.quarterLength / time_step)
+    if current_note["pitch"] is not None:
+        elements.append({"pitch": current_note["pitch"], "duration": int(current_note["duration"] / time_step),
+                         "tone": current_note["tone"]})
 
-        for step in range(steps):
-            if step == 0:
-                encoded_lyrics.append(symbol_lyric)
-            else:
-                encoded_lyrics.append(previous_lyric)
-
-    # Example for modification
-    # Original: 1, 1, 1, 1, 2, 2, 3, 3, 3, 3, 4, 4
-    # We have to let the model decide when to change notes
-    #      New: 1, 2, 2, 2, 2, 3, 3, 4, 4, 4, 4, 0
-
-    modified_encoded_lyrics = []
-    i = 0
-    j = 0
-
-    modified_encoded_lyrics.append(encoded_lyrics[0])
-    while True:
-        i = i + 1
-        if encoded_lyrics[i] != encoded_lyrics[j]:
-            for x in range(i - j):
-                modified_encoded_lyrics.append(encoded_lyrics[i])
-            j = i
-
-        if i == len(encoded_lyrics) - 1:
-            break
-
-    for x in range(len(encoded_lyrics) - len(modified_encoded_lyrics)):
-        modified_encoded_lyrics.append(0)
-
-    modified_encoded_lyrics = " ".join(map(str, modified_encoded_lyrics))
-
-    return modified_encoded_lyrics
+    return elements
 
 
 def get_tone(word):
     jyutping = pc.characters_to_jyutping(word)
-    return jyutping[0][1][-1]
+    return int(jyutping[0][1][-1])
 
 
-def create_single_file_datasets(dataset_path, song_single_dataset_path, lyric_single_dataset_path, sequence_length):
-    # Every input of LSTM must be of the same length
-    new_song_delimiter = "/ " * sequence_length
-    all_songs = ""
-    all_lyrics = ""
+def create_mapping(encoded_song):
+    unique_pitches = set([element["pitch"] for element in encoded_song])
+    unique_durations = set([element["duration"] for element in encoded_song])
 
-    # load encoded songs and lyrics + add delimiters
-    for path, _, files in os.walk(dataset_path):
-        for file in files:
-            if file != '.DS_Store':
-                with open(os.path.join(path, file), "r") as fp:
-                    song = fp.readline().strip()
-                    lyrics = fp.readline().strip()
+    # Create dictionaries that map each name and value to an integer ID
+    pitch_to_id = {name: i for i, name in enumerate(unique_pitches)}
+    duration_to_id = {value: i for i, value in enumerate(unique_durations)}
 
-                all_songs = all_songs + song + " " + new_song_delimiter
-                all_lyrics = all_lyrics + lyrics + " " + new_song_delimiter
+    with open(os.path.join(MAPPING_PATH, "pitch_mapping.json"), "w") as pitch_file:
+        json.dump(pitch_to_id, pitch_file, indent=4)
 
-    # remove last space
-    all_songs = all_songs[:-1]
-    all_lyrics = all_lyrics[:-1]
-
-    with open(song_single_dataset_path, "w") as fp:
-        fp.write(all_songs)
-
-    with open(lyric_single_dataset_path, "w") as fp:
-        fp.write(all_lyrics)
+    with open(os.path.join(MAPPING_PATH, "duration_mapping.json"), "w") as duration_file:
+        json.dump(duration_to_id, duration_file, indent=4)
 
 
-    return all_songs, all_lyrics
+def bulk_append(dict_list, new_dict):
+    for key, val in new_dict.items():
+        dict_list[key].append(val)
 
 
-def create_mapping(songs, mapping_path):
-    mappings = {}
-
-    # identify the vocab
-
-    songs = songs.split()
-
-    # e.g. {1 5 3 2 4 1 5 3 5} set-> {1 2 3 4 5}
-    vocabulary = list(set(songs))
-
-    # create mappings
-    for i, symbol in enumerate(vocabulary):
-        mappings[symbol] = i
-
-    # save vocab to json
-    with open(mapping_path, "w") as fp:
-        json.dump(mappings, fp, indent=4)
-
-
-def generating_training_sequences(sequence_length, song_file_dataset, lyrics_file_dataset):
+def generating_training_sequences(dataset_path=DATASET_PATH):
     # Give the network 4 bars of notes (64 time steps) and 4 bar of tones, with the tone that the target has
 
-    with open(song_file_dataset, "r") as fp:
-        songs = fp.read()
+    inputs = { k: [] for k in input_params }
+    outputs = { k: [] for k in output_params }
 
-    with open(lyrics_file_dataset, "r") as fp:
-        lyrics = fp.read()
+    for path, _, files in os.walk(dataset_path):
+        for fileId, filename in enumerate(files):
+            if filename == '.DS_Store':
+                continue
 
-    int_songs = convert_songs_to_int(songs)  # Map the songs to int
-    int_lyrics = convert_lyrics_to_int(lyrics)  # Map the lyrics to int
+            stdout.write(f"\rProcessing {filename}   ({fileId + 1} / {len(files)})")
+            stdout.flush()
+            with open(os.path.join(path, filename)) as file:
+                data = json.load(file)
+                no_of_inputs = len(data) - SEQUENCE_LENGTH
+                pos = 0
+                onehot_vector_inputs = { k: [] for k in input_params }
+                onehot_vector_outputs = { k: [] for k in output_params }
+                for index, element in enumerate(data):
+                    pitch = int(element["pitch"])
+                    duration = int(element["duration"])
 
-    inputs_songs = []
-    inputs_lyrics = []
-    targets = []
+                    pitch_id = pitch_to_id[str(pitch)]
+                    duration_id = duration_to_id[str(duration)]
 
-    # generate the training sequences (e.g. 100 notes -> 36 training samples)
+                    pos = (pos + duration) % 64
 
-    if len(int_songs) != len(int_lyrics):
-        raise Exception("The length of the song is not equal to the length of the lyrics")
+                    single_input = {
+                        "pitch": [int(pitch_id == i) for i in range(num_pitch)],
+                        "duration": [int(duration_id == j) for j in range(num_duration)],
+                        # Note position within a single bar
+                        "pos_internal": [int(pos % 16 == k) for k in range(num_pos_internal)],
+                        # Note position within 4-bar phrase
+                        "pos_external": [int((pos // 16) % 4 == k) for k in range(num_pos_external)],
+                    }
 
-    num_sequences = len(int_songs) - sequence_length
+                    for i in range(8):
+                        single_input["tone_" + str(i)] = [int((END_TONE if index + i >= len(data) else int(data[index + i]["tone"])) == k) for k in range(num_tone)]
 
-    for i in range(num_sequences):
+                    # Create a list of one-hot encoded vectors for each element
+                    bulk_append(onehot_vector_outputs, {
+                        "pitch": [int(pitch_id == i) for i in range(num_pitch)],
+                        "duration": [int(duration_id == j) for j in range(num_duration)],
+                    })
 
-        training_songs = int_songs[i:i + sequence_length]
-        training_songs[-1] = 0
-        training_lyrics = int_lyrics[i:i + sequence_length]
-        training_targets = int_songs[i + sequence_length - 1]
+                    bulk_append(onehot_vector_inputs, single_input)
 
-        inputs_songs.append(training_songs)
-        inputs_lyrics.append(training_lyrics)
-        targets.append(training_targets)
+                for i in range(no_of_inputs):
+                    bulk_append(inputs, {k: v[i:(i + SEQUENCE_LENGTH)] for k, v in onehot_vector_inputs.items()})
+                    bulk_append(outputs, {k: v[i + SEQUENCE_LENGTH] for k, v in onehot_vector_outputs.items()})
 
-    # one-hot encoding
-    # input shape: (# of sequences, sequence length) -> (# of sequences, sequence length, vocabulary size)
-    # E.g.
-    # [
-    #   [1, 2, 3, 4, 5],
-    #   [2, 3, 4, 5, 6]
-    # ]
-    # Becomes
-    # [
-    #   [ [1, 0, 0, 0, 0, 0], [0, 1, 0, 0, 0, 0], ... [0, 0, 0, 0, 1, 0] ],
-    #   [ [0, 1, 0, 0, 0, 0], [0, 0, 1, 0, 0, 0], ... [0, 0, 0, 0, 0, 1] ]
-    # ]
+    print("\nFinished file processing.")
 
-    inputs_songs = tf.keras.utils.to_categorical(inputs_songs, num_classes=NOTE_MAPPING_SIZE)
-    inputs_lyrics = tf.keras.utils.to_categorical(inputs_lyrics, num_classes=TONE_MAPPING_SIZE)
+    print(f"There are {len(inputs['pitch'])} sequences.")
 
-    print(inputs_songs.shape)
-    print(inputs_lyrics.shape)
+    inputs = {k: np.array(v) for k, v in inputs.items()}
+    outputs = {k: np.array(v) for k, v in outputs.items()}
 
-    inputs = tf.concat([inputs_songs, inputs_lyrics], 2)
-    print(inputs)
-
-    targets = np.array(targets)
-
-    return inputs, targets
-
-
-def convert_songs_to_int(songs):
-    int_songs = []
-
-    # load mappings
-    with open(MAPPING_PATH, "r") as fp:
-        mappings = json.load(fp)
-
-    # cast songs string to a list
-    songs = songs.split()
-
-    # map songs to int
-    for symbol in songs:
-        int_songs.append(mappings[symbol])
-
-    return int_songs
-
-
-def convert_lyrics_to_int(songs):
-    int_lyrics = []
-
-    # cast songs string to a list
-    songs = songs.split()
-
-    # map songs to int
-    for symbol in songs:
-        int_lyrics.append(TONE_MAPPING[symbol])
-
-    return int_lyrics
+    return inputs, outputs
 
 
 def main():
-    create_datasets(RAW_DATA_PATH)
-    songs, lyrics = create_single_file_datasets(SAVE_DIR, SINGLE_SONGS_FILE_DATASET,
-                                                SINGLE_LYRICS_FILE_DATASET, SEQUENCE_LENGTH)
-    create_mapping(songs, MAPPING_PATH)
+    create_datasets_and_mapping(RAW_DATA_PATH, DATASET_PATH)
 
 
 if __name__ == "__main__":

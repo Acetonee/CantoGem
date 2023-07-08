@@ -1,59 +1,82 @@
-import keras.layers
-from preprocess import generating_training_sequences, SEQUENCE_LENGTH, TONE_MAPPING_SIZE, \
-    SINGLE_SONGS_FILE_DATASET, SINGLE_LYRICS_FILE_DATASET, NOTE_MAPPING_SIZE
+from preprocess import generating_training_sequences
+from preprocess import input_params, output_params, param_shapes
+from tensorflow import keras
+
 import tensorflow as tf
+import matplotlib.pyplot as plt
 
-# vocab size
-OUTPUT_UNITS = NOTE_MAPPING_SIZE + TONE_MAPPING_SIZE
-NUM_UNITS = [256]
-LOSS = "sparse_categorical_crossentropy"
+INPUT_UNITS = 50
+OUTPUT_UNITS = 30
 LEARNING_RATE = 0.001
-EPOCHS = 10
-BATCH_SIZE = 64
-SAVE_MODEL_PATH = "model.h5"
-TEST_INPUT_PATH = "testing_dataset/input_testing_dataset"
-TEST_OUTPUT_PATH = "testing_dataset/output_testing_dataset"
+EPOCHS = 90
+BATCH_SIZE = 16
+SAVE_MODEL_PATH = "model_weights.ckpt"
+PLOT_PATH = "./training_plot.png"
 
 
-def build_model(output_units, num_units, loss, learning_rate):
-    input = tf.keras.layers.Input(shape=(BATCH_SIZE, OUTPUT_UNITS))  # Dk why None not working
-    x = keras.layers.LSTM(num_units[0])(input)
-    x = keras.layers.Dropout(0.2)(x)
-    output = tf.keras.layers.Dense(output_units, activation="softmax")(x)
-    model = tf.keras.Model(input, output)
+def build_model():
+    input_layers = dict()
+    inputs = dict()
 
-    model.compile(loss=loss,
-                  optimizer=tf.keras.optimizers.legacy.Adam(learning_rate=learning_rate),
+    outputs = dict()
+
+    # create the model architecture
+    for type in input_params:
+        input_layers[type] = keras.layers.Input(shape=(None, param_shapes[type]))
+        tmp = keras.layers.LSTM(param_shapes[type], return_sequences=True)(input_layers[type])
+        inputs[type] = keras.layers.Dropout(0.4)(tmp)
+
+    combined_input = keras.layers.concatenate(list(inputs.values()))
+
+    x = keras.layers.LSTM(512, return_sequences=True)(combined_input)
+    x = keras.layers.Dropout(0.4)(x)
+    x = keras.layers.LSTM(512)(x)
+    x = keras.layers.BatchNormalization()(x)
+    x = keras.layers.Dropout(0.3)(x)
+    x = keras.layers.Dense(256, activation="relu")(x)
+
+    tmp = keras.layers.Dense(128, activation="relu")(x)
+    tmp = keras.layers.BatchNormalization()(tmp)
+    tmp = keras.layers.Dropout(0.2)(tmp)
+    outputs["pitch"] = keras.layers.Dense(param_shapes["pitch"], activation="softmax", name="pitch")(tmp)
+    tmp = keras.layers.Dropout(0.8)(outputs["pitch"])
+    tmp = keras.layers.Dense(128, activation="relu")(keras.layers.concatenate([x, tmp]))
+    tmp = keras.layers.BatchNormalization()(tmp)
+    tmp = keras.layers.Dropout(0.2)(tmp)
+    outputs["duration"] = keras.layers.Dense(param_shapes["duration"], activation="softmax", name="dur.")(tmp)
+
+    model = keras.Model(list(inputs.values()), list(outputs.values()))
+
+    # compile model
+    model.compile(loss="categorical_crossentropy",
+                  optimizer=keras.optimizers.Adam(learning_rate=LEARNING_RATE),
                   metrics=["accuracy"])
-    model.summary()
+
     return model
 
 
-def train(output_units=OUTPUT_UNITS, num_units=NUM_UNITS, loss=LOSS, learning_rate=LEARNING_RATE):
+def train():
+    loadFromExist = input("Load model from existing? (Y/N) ").lower() == "y"
+    print("Continuing training session." if loadFromExist else "Creating new model.")
+    print("Num GPUs Available: ", len(tf.config.list_physical_devices('GPU')))
+
     # generate the training sequences
-    inputs_songs, targets = generating_training_sequences(SEQUENCE_LENGTH, SINGLE_SONGS_FILE_DATASET,
-                                                          SINGLE_LYRICS_FILE_DATASET)
+    inputs, targets = generating_training_sequences()
 
     # build the network
-    model = build_model(output_units, num_units, loss, learning_rate)
+    model = build_model()
+    if loadFromExist:
+        model.load_weights(SAVE_MODEL_PATH)
 
     # train the model
-    model.fit(inputs_songs, targets, epochs=EPOCHS, batch_size=BATCH_SIZE)
+    # Create a callback that saves the model's weights
+    cp_callback = keras.callbacks.ModelCheckpoint(filepath=SAVE_MODEL_PATH, verbose=0, save_weights_only=True)
+    model.fit(list(inputs.values()), list(targets.values()), epochs=EPOCHS, batch_size=BATCH_SIZE,
+                        callbacks=[cp_callback])
 
     # save the model
-    model.save(SAVE_MODEL_PATH)
-
-
-def evaluate(testing_input_path=TEST_INPUT_PATH, testing_output_path=TEST_OUTPUT_PATH, model_path=SAVE_MODEL_PATH):
-    model = tf.keras.models.load_model(model_path)
-    inputs_songs, targets = generating_training_sequences(SEQUENCE_LENGTH, testing_output_path, testing_input_path)
-    loss, acc = model.evaluate(inputs_songs, targets)
-    print("loss:")
-    print(loss)
-    print("acc:")
-    print(acc)
+    model.save_weights(SAVE_MODEL_PATH)
 
 
 if __name__ == "__main__":
     train()
-    evaluate()
