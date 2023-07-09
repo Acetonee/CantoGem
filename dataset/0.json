@@ -1,13 +1,8 @@
 [
     {
         "pitch": 0,
-        "duration": 8,
-        "tone": 0
-    },
-    {
-        "pitch": 0,
-        "duration": 4,
-        "tone": 0
+        "duration": 12,
+        "tone": 7
     },
     {
         "pitch": 55,
@@ -266,13 +261,8 @@
     },
     {
         "pitch": 0,
-        "duration": 16,
-        "tone": 0
-    },
-    {
-        "pitch": 0,
-        "duration": 4,
-        "tone": 0
+        "duration": 20,
+        "tone": 7
     },
     {
         "pitch": 72,
@@ -331,13 +321,8 @@
     },
     {
         "pitch": 0,
-        "duration": 4,
-        "tone": 0
-    },
-    {
-        "pitch": 0,
-        "duration": 4,
-        "tone": 0
+        "duration": 8,
+        "tone": 7
     },
     {
         "pitch": 67,
@@ -397,7 +382,7 @@
     {
         "pitch": 0,
         "duration": 12,
-        "tone": 0
+        "tone": 7
     },
     {
         "pitch": 55,

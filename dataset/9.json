@@ -2,7 +2,7 @@
     {
         "pitch": 0,
         "duration": 8,
-        "tone": 0
+        "tone": 7
     },
     {
         "pitch": 55,
@@ -651,13 +651,8 @@
     },
     {
         "pitch": 0,
-        "duration": 16,
-        "tone": 0
-    },
-    {
-        "pitch": 0,
-        "duration": 8,
-        "tone": 0
+        "duration": 24,
+        "tone": 7
     },
     {
         "pitch": 55,
@@ -947,6 +942,6 @@
     {
         "pitch": 0,
         "duration": 16,
-        "tone": 0
+        "tone": 7
     }
 ]

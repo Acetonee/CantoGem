@@ -150,11 +150,21 @@ def encode_song(song, time_step=0.25):
                 # print(event.lyric)
 
         elif isinstance(event, m21.note.Rest):
-            if current_note["pitch"] is not None:
+            if current_note["pitch"] is None:
+                current_note["pitch"] = 0
+                current_note["duration"] = event.duration.quarterLength
+                current_note["tone"] = LONG_REST_TONE if current_note["duration"] >= 2 else REST_TONE
+
+            elif current_note["pitch"] == 0:
+                current_note["duration"] += event.duration.quarterLength
+                current_note["tone"] = LONG_REST_TONE if current_note["duration"] >= 2 else REST_TONE
+
+            else:
                 elements.append({"pitch": current_note["pitch"], "duration": int(current_note["duration"] / time_step),
                                  "tone": current_note["tone"]})
-                current_note = {"pitch": None, "duration": None, "tone": None}
-            elements.append({"pitch": 0, "duration": int(event.duration.quarterLength / time_step), "tone": 0})
+                current_note["pitch"] = 0
+                current_note["duration"] = event.duration.quarterLength
+                current_note["tone"] = LONG_REST_TONE if current_note["duration"] >= 2 else REST_TONE
 
     if current_note["pitch"] is not None:
         elements.append({"pitch": current_note["pitch"], "duration": int(current_note["duration"] / time_step),
