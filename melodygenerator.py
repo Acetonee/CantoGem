@@ -124,7 +124,7 @@ if __name__ == "__main__":
 
     melody = mg.generate_melody(initial_note, tones, temperature={
         # temperature
-        "pitch": get_bell_sigmoid(min_val=0.1, max_val=0.4, roughness=20),
-        "duration": get_bell_sigmoid(min_val=0.05, max_val=0.3, roughness=10)
+        "pitch": get_bell_sigmoid(min_val=0.1, max_val=0.4, roughness=10),
+        "duration": get_bell_sigmoid(min_val=0.05, max_val=0.2, roughness=10)
     })
     mg.save_melody(melody)

@@ -39,7 +39,7 @@ def build_model():
     tmp = keras.layers.BatchNormalization()(tmp)
     tmp = keras.layers.Dropout(0.2)(tmp)
     outputs["pitch"] = keras.layers.Dense(param_shapes["pitch"], activation="softmax", name="pitch")(tmp)
-    tmp = keras.layers.Dropout(0.8)(outputs["pitch"])
+    tmp = keras.layers.Dropout(0.9)(outputs["pitch"])
     tmp = keras.layers.Dense(128, activation="relu")(keras.layers.concatenate([x, tmp]))
     tmp = keras.layers.BatchNormalization()(tmp)
     tmp = keras.layers.Dropout(0.2)(tmp)
