@@ -131,8 +131,13 @@
     },
     {
         "pitch": 64,
-        "duration": 10,
+        "duration": 8,
         "tone": 6
+    },
+    {
+        "pitch": 0,
+        "duration": 2,
+        "tone": 0
     },
     {
         "pitch": 62,
@@ -1121,8 +1126,13 @@
     },
     {
         "pitch": 72,
-        "duration": 8,
+        "duration": 4,
         "tone": 5
+    },
+    {
+        "pitch": 0,
+        "duration": 4,
+        "tone": 0
     },
     {
         "pitch": 72,
@@ -1201,8 +1211,13 @@
     },
     {
         "pitch": 74,
-        "duration": 6,
+        "duration": 4,
         "tone": 3
+    },
+    {
+        "pitch": 0,
+        "duration": 2,
+        "tone": 0
     },
     {
         "pitch": 69,

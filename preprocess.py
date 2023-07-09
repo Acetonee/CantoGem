@@ -11,6 +11,9 @@ RAW_DATA_PATH = "rawdata"
 DATASET_PATH = "dataset"
 MAPPING_PATH = "mappings"
 SEQUENCE_LENGTH = 16
+
+REST_TONE = 0
+LONG_REST_TONE = 7
 END_TONE = 10
 
 ACCEPTABLE_DURATIONS = [
@@ -59,18 +62,12 @@ for i in range(8):
 def create_datasets_and_mapping(raw_data_path, save_dir):
     # load the songs
     print("Loading songs...")
-    songs = load_songs(raw_data_path)
-    print(f"Loaded {len(songs)} songs.")
+    encoded_songs = load_songs(raw_data_path)
+    print(f"Loaded {len(encoded_songs)} songs.")
 
     encoded_songs_combined = []
 
-    for i, song in enumerate(songs):
-        if not has_acceptable_duration(song, ACCEPTABLE_DURATIONS):
-            continue
-
-        song = transpose(song)
-        encoded_song = encode_song(song)
-
+    for i, encoded_song in enumerate(encoded_songs):
         if encoded_songs_combined is None:
             encoded_songs_combined = encoded_song.copy()
         else:
@@ -91,6 +88,11 @@ def load_songs(dataset_path):
                 if file[-3:] == "mxl":
                     file_path = os.path.join(sub_path, file)  # get full file path
                     song = m21.converter.parse(file_path)
+                    if not has_acceptable_duration(song, ACCEPTABLE_DURATIONS):
+                        continue
+                    print(file)
+                    song = transpose(song)
+                    song = encode_song(song)
                     songs.append(song)
     return songs
 
@@ -133,6 +135,7 @@ def encode_song(song, time_step=0.25):
                 current_note["pitch"] = event.pitch.midi
                 current_note["duration"] = event.duration.quarterLength
                 current_note["tone"] = get_tone(event.lyric)
+                # print(event.lyric)
 
             elif current_note["pitch"] == event.pitch.midi and event.tie is not None:
                 current_note["duration"] += event.duration.quarterLength
@@ -144,6 +147,7 @@ def encode_song(song, time_step=0.25):
                 current_note["pitch"] = event.pitch.midi
                 current_note["duration"] = event.duration.quarterLength
                 current_note["tone"] = get_tone(event.lyric)
+                # print(event.lyric)
 
         elif isinstance(event, m21.note.Rest):
             if current_note["pitch"] is not None:
