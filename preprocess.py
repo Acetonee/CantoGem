@@ -214,9 +214,15 @@ def generating_training_sequences(dataset_path=DATASET_PATH):
             with open(os.path.join(path, filename)) as file:
                 data = json.load(file)
                 no_of_inputs = len(data) - SEQUENCE_LENGTH
+
                 pos = 0
+                # treat as anticipation if long rest at start of song
+                if data[0]["pitch"] == 0 and data[0]["duration"] >= 8:
+                    pos = -16
+
                 onehot_vector_inputs = { k: [] for k in input_params }
                 onehot_vector_outputs = { k: [] for k in output_params }
+
                 for index, element in enumerate(data):
                     pitch = int(element["pitch"])
                     duration = int(element["duration"])
@@ -224,19 +230,22 @@ def generating_training_sequences(dataset_path=DATASET_PATH):
                     pitch_id = pitch_to_id[str(pitch)]
                     duration_id = duration_to_id[str(duration)]
 
-                    pos = (pos + duration) % 64
+                    pos += duration
 
                     single_input = {
-                        "pitch": [int(pitch_id == i) for i in range(num_pitch)],
-                        "duration": [int(duration_id == j) for j in range(num_duration)],
+                        "pitch": pitch_id,
+                        "duration": duration_id,
                         # Note position within a single bar
-                        "pos_internal": [int(pos % 16 == k) for k in range(num_pos_internal)],
+                        "pos_internal": pos % 16,
                         # Note position within 4-bar phrase
-                        "pos_external": [int((pos // 16) % 4 == k) for k in range(num_pos_external)],
+                        "pos_external": (pos // 16) % 4,
                     }
 
+                    # Input tones, 0 = current, 1 = next, 2 = next next, etc
                     for i in range(8):
-                        single_input["tone_" + str(i)] = [int((END_TONE if index + i >= len(data) else int(data[index + i]["tone"])) == k) for k in range(num_tone)]
+                        single_input["tone_" + str(i)] = END_TONE if index + i >= len(data) else data[index + i]["tone"]
+                    
+                    single_input = { k: [int(v == j) for j in range(param_shapes[k])] for k, v in single_input.items()}
 
                     # Create a list of one-hot encoded vectors for each element
                     bulk_append(onehot_vector_outputs, {
