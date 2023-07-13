@@ -2,7 +2,6 @@ from preprocess import generating_training_sequences
 from preprocess import input_params, output_params, param_shapes
 from tensorflow import keras
 
-import tensorflow as tf
 import matplotlib.pyplot as plt
 
 INPUT_UNITS = 50
@@ -58,7 +57,6 @@ def build_model():
 def train():
     loadFromExist = input("Load model from existing? (Y/N) ").lower() == "y"
     print("Continuing training session." if loadFromExist else "Creating new model.")
-    print("Num GPUs Available: ", len(tf.config.list_physical_devices('GPU')))
 
     # generate the training sequences
     inputs, targets = generating_training_sequences()
