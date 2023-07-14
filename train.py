@@ -23,7 +23,8 @@ def build_model():
     for type in input_params:
         input_layers[type] = keras.layers.Input(shape=(None, param_shapes[type]))
         tmp = keras.layers.LSTM(param_shapes[type], return_sequences=True)(input_layers[type])
-        inputs[type] = keras.layers.Dropout(0.4)(tmp)
+        # slowly increase dropout the farther a tone is
+        inputs[type] = keras.layers.Dropout(max(0, int(type[-1]) - 1) ** 0.2 / 2 + 0.1 if type[0:4] == "tone" else 0.4)(tmp)
 
     combined_input = keras.layers.concatenate(list(inputs.values()))
 
@@ -38,7 +39,7 @@ def build_model():
     tmp = keras.layers.BatchNormalization()(tmp)
     tmp = keras.layers.Dropout(0.2)(tmp)
     outputs["pitch"] = keras.layers.Dense(param_shapes["pitch"], activation="softmax", name="pitch")(tmp)
-    tmp = keras.layers.Dropout(0.9)(outputs["pitch"])
+    tmp = keras.layers.Dropout(0.8)(outputs["pitch"])
     tmp = keras.layers.Dense(128, activation="relu")(keras.layers.concatenate([x, tmp]))
     tmp = keras.layers.BatchNormalization()(tmp)
     tmp = keras.layers.Dropout(0.2)(tmp)
