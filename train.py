@@ -24,7 +24,7 @@ def build_model():
         input_layers[type] = keras.layers.Input(shape=(None, param_shapes[type]))
         tmp = keras.layers.LSTM(param_shapes[type], return_sequences=True)(input_layers[type])
         # slowly increase dropout the farther a tone is
-        inputs[type] = keras.layers.Dropout(max(0, int(type[-1]) - 1) ** 0.2 / 2 + 0.1 if type[0:4] == "tone" else 0.4)(tmp)
+        inputs[type] = keras.layers.Dropout(max(0, int(type[-1]) - 1.9) ** 0.2 / 2 + 0.15 if type[0:4] == "tone" else 0.4)(tmp)
 
     combined_input = keras.layers.concatenate(list(inputs.values()))
 
