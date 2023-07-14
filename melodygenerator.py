@@ -55,6 +55,8 @@ class MelodyGenerator:
     def save_melody(self, melody, step_duration=0.25, format="midi", file_name="melody.mid"):
         stream = m21.stream.Stream()
         for note in melody:
+            if note["duration"] == 0:
+                continue
             m21_event = m21.note.Rest(0)
             # 0 is shorthand for a rest
             if note["pitch"] == 0:
