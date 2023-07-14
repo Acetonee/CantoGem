@@ -2,12 +2,10 @@ import math
 
 import numpy as np
 import music21 as m21
-from typing import Dict
 
-from preprocess import END_TONE
-from preprocess import pitch_to_id, duration_to_id
 from preprocess import id_to_pitch, id_to_duration
-from preprocess import input_params, output_params, param_shapes, num_tone
+from preprocess import input_params, output_params
+from preprocess import process_input_data
 
 from train import SAVE_MODEL_PATH, build_model
 
@@ -20,35 +18,8 @@ class MelodyGenerator:
         self.model.load_weights(SAVE_MODEL_PATH).expect_partial()
 
     def onehot_input_from_seed(self, data, tones):
-        onehot_input = list(map(lambda _: [], input_params))
-        pos = 0
-
-
-        for index, element in enumerate(data):
-            pitch = int(element["pitch"])
-            duration = int(element["duration"])
-
-            pitch_id = pitch_to_id[str(pitch)]
-            duration_id = duration_to_id[str(duration)]
-
-            pos = (pos + duration) % 64
-
-            # Create a list of one-hot encoded vectors for each element
-            # Add position and tone data to input
-            single_input: Dict[str, int] = {
-                "pitch": pitch_id,
-                "duration": duration_id,
-                # Note position within a single bar
-                "pos_internal": pos % 16,
-                # Note position within 4-bar phrase
-                "pos_external": (pos // 16) % 4
-            }
-
-            for i in range(8):
-                single_input["tone_" + str(i)] = END_TONE if index + i >= len(tones) else int(tones[index + i])
-
-            for i, key in enumerate(input_params):
-                onehot_input[i].append([int(single_input[key] == k) for k in range(param_shapes[key])])
+        onehot_input_dict = process_input_data(data, tones)
+        onehot_input = [ onehot_input_dict[k] for k in input_params ]
 
         for i, onehot_vectors in enumerate(onehot_input):
             onehot_input[i] = np.array(onehot_vectors)[np.newaxis, ...]

@@ -29,11 +29,15 @@ ACCEPTABLE_DURATIONS = [
 
 pitch_to_id = dict()
 duration_to_id = dict()
+tones_to_intervals = dict()
 with open(os.path.join(MAPPING_PATH, "pitch_mapping.json"), "r") as pitch_file:
     pitch_to_id = json.load(pitch_file)
 
 with open(os.path.join(MAPPING_PATH, "duration_mapping.json"), "r") as duration_file:
     duration_to_id = json.load(duration_file)
+
+with open("intelligible_intervals.json", "r") as interval_file:
+    tones_to_intervals = json.load(interval_file)
 
 id_to_pitch = { v: int(k) for k, v in pitch_to_id.items() }
 id_to_duration = { v: int(k) for k, v in duration_to_id.items() }
@@ -46,7 +50,7 @@ num_pos_internal = 16
 num_pos_external = 4
 num_when_rest = 8
 
-input_params = ("pitch", "duration") + tuple(["tone_" + str(i) for i in range(8)]) + ("pos_internal", "pos_external")
+input_params = ("pitch", "duration", "pos_internal", "pos_external", "valid_pitches") + tuple(["tone_" + str(i) for i in range(8)])
 output_params = ("pitch", "duration")
 
 param_shapes = {
@@ -54,6 +58,7 @@ param_shapes = {
     "duration": num_duration,
     "pos_internal": num_pos_internal,
     "pos_external": num_pos_external,
+    "valid_pitches": num_pitch,
 }
 for i in range(8):
     param_shapes["tone_" + str(i)] = num_tone
@@ -144,10 +149,20 @@ def encode_song(song, time_step=0.25):
             else:
                 elements.append({"pitch": current_note["pitch"], "duration": int(current_note["duration"] / time_step),
                                  "tone": current_note["tone"]})
+
+                # Save last note
+                last_note = {key: value for key, value in current_note.items()}
+
                 current_note["pitch"] = event.pitch.midi
                 current_note["duration"] = event.duration.quarterLength
                 current_note["tone"] = get_tone(event.lyric)
-                # print(event.lyric)
+
+                # Check how many tones are not intelligible, fool the loss function
+                key = str(last_note["tone"]) + "_" + str(current_note["tone"])
+                if key in tones_to_intervals:
+                    interval = current_note["pitch"] - last_note["pitch"]
+                    if interval not in tones_to_intervals[key]:
+                        elements.insert(-2, {"pitch": 0, "duration": 0, "tone": 0})
 
         elif isinstance(event, m21.note.Rest):
             if current_note["pitch"] is None:
@@ -162,6 +177,7 @@ def encode_song(song, time_step=0.25):
             else:
                 elements.append({"pitch": current_note["pitch"], "duration": int(current_note["duration"] / time_step),
                                  "tone": current_note["tone"]})
+
                 current_note["pitch"] = 0
                 current_note["duration"] = event.duration.quarterLength
                 current_note["tone"] = LONG_REST_TONE if current_note["duration"] >= 2 else REST_TONE
@@ -179,8 +195,10 @@ def get_tone(word):
 
 
 def create_mapping(encoded_song):
-    unique_pitches = set([element["pitch"] for element in encoded_song])
-    unique_durations = set([element["duration"] for element in encoded_song])
+    unique_pitches = list(set([element["pitch"] for element in encoded_song]))
+    unique_durations = list(set([element["duration"] for element in encoded_song]))
+    unique_pitches.sort()
+    unique_durations.sort()
 
     # Create dictionaries that map each name and value to an integer ID
     pitch_to_id = {name: i for i, name in enumerate(unique_pitches)}
@@ -197,6 +215,60 @@ def bulk_append(dict_list, new_dict):
     for key, val in new_dict.items():
         dict_list[key].append(val)
 
+def process_input_data(data, tones=None):
+    pos = 0
+    # treat as anticipation if long rest at start of song
+    if data[0]["pitch"] == 0 and data[0]["duration"] >= 8:
+        pos = -16
+
+    onehot_vector_inputs = { k: [] for k in input_params }
+
+    for index, element in enumerate(data):
+        pitch = int(element["pitch"])
+        duration = int(element["duration"])
+
+        pitch_id = pitch_to_id[str(pitch)]
+        duration_id = duration_to_id[str(duration)]
+
+        pos += duration
+
+        single_input = {
+            "pitch": pitch_id,
+            "duration": duration_id,
+            # Note position within a single bar
+            "pos_internal": pos % 16,
+            # Note position within 4-bar phrase
+            "pos_external": (pos // 16) % 4,
+        }
+
+        # Input tones, 0 = current, 1 = next, 2 = next next, etc
+        for i in range(8):
+            if tones == None:
+                single_input["tone_" + str(i)] = END_TONE if index + i >= len(data) else data[index + i]["tone"]
+            else:
+                single_input["tone_" + str(i)] = END_TONE if index + i >= len(tones) else tones[index + i]
+        
+        valid_intervals = [0] * num_pitch
+        interval_idx = str(single_input["tone_0"]) + "_" + str(single_input["tone_1"])
+        # if the next tone is a rest, the only valid pitch is rest
+        if single_input["tone_1"] in (REST_TONE, LONG_REST_TONE, END_TONE):
+            valid_intervals[pitch_to_id["0"]] = 1
+        # if starting from a rest, any note is valid
+        elif interval_idx not in tones_to_intervals:
+            valid_intervals = [1] * num_pitch
+        # calculate a vector of valid pitches
+        else:
+            for interval in tones_to_intervals[interval_idx]:
+                new_pitch = str(pitch + interval)
+                if new_pitch in pitch_to_id:
+                    valid_intervals[pitch_to_id[new_pitch]] = 1
+        
+        single_input = { k: [int(v == j) for j in range(param_shapes[k])] for k, v in single_input.items() }
+        single_input["valid_pitches"] = valid_intervals
+
+        bulk_append(onehot_vector_inputs, single_input)
+
+    return onehot_vector_inputs
 
 def generating_training_sequences(dataset_path=DATASET_PATH):
     # Give the network 4 bars of notes (64 time steps) and 4 bar of tones, with the tone that the target has
@@ -215,45 +287,21 @@ def generating_training_sequences(dataset_path=DATASET_PATH):
                 data = json.load(file)
                 no_of_inputs = len(data) - SEQUENCE_LENGTH
 
-                pos = 0
-                # treat as anticipation if long rest at start of song
-                if data[0]["pitch"] == 0 and data[0]["duration"] >= 8:
-                    pos = -16
-
-                onehot_vector_inputs = { k: [] for k in input_params }
+                onehot_vector_inputs = process_input_data(data)
                 onehot_vector_outputs = { k: [] for k in output_params }
 
-                for index, element in enumerate(data):
+                for element in data:
                     pitch = int(element["pitch"])
                     duration = int(element["duration"])
 
                     pitch_id = pitch_to_id[str(pitch)]
                     duration_id = duration_to_id[str(duration)]
 
-                    pos += duration
-
-                    single_input = {
-                        "pitch": pitch_id,
-                        "duration": duration_id,
-                        # Note position within a single bar
-                        "pos_internal": pos % 16,
-                        # Note position within 4-bar phrase
-                        "pos_external": (pos // 16) % 4,
-                    }
-
-                    # Input tones, 0 = current, 1 = next, 2 = next next, etc
-                    for i in range(8):
-                        single_input["tone_" + str(i)] = END_TONE if index + i >= len(data) else data[index + i]["tone"]
-                    
-                    single_input = { k: [int(v == j) for j in range(param_shapes[k])] for k, v in single_input.items()}
-
                     # Create a list of one-hot encoded vectors for each element
                     bulk_append(onehot_vector_outputs, {
                         "pitch": [int(pitch_id == i) for i in range(num_pitch)],
                         "duration": [int(duration_id == j) for j in range(num_duration)],
                     })
-
-                    bulk_append(onehot_vector_inputs, single_input)
 
                 for i in range(no_of_inputs):
                     bulk_append(inputs, {k: v[i:(i + SEQUENCE_LENGTH)] for k, v in onehot_vector_inputs.items()})

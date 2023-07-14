@@ -95,9 +95,19 @@
         "tone": 6
     },
     {
+        "pitch": 0,
+        "duration": 0,
+        "tone": 0
+    },
+    {
         "pitch": 62,
         "duration": 4,
         "tone": 2
+    },
+    {
+        "pitch": 0,
+        "duration": 0,
+        "tone": 0
     },
     {
         "pitch": 60,
@@ -110,6 +120,11 @@
         "tone": 5
     },
     {
+        "pitch": 0,
+        "duration": 0,
+        "tone": 0
+    },
+    {
         "pitch": 62,
         "duration": 4,
         "tone": 3
@@ -133,6 +148,11 @@
         "pitch": 62,
         "duration": 4,
         "tone": 2
+    },
+    {
+        "pitch": 0,
+        "duration": 0,
+        "tone": 0
     },
     {
         "pitch": 60,
@@ -191,6 +211,11 @@
     },
     {
         "pitch": 0,
+        "duration": 0,
+        "tone": 0
+    },
+    {
+        "pitch": 0,
         "duration": 4,
         "tone": 0
     },
@@ -200,14 +225,29 @@
         "tone": 2
     },
     {
+        "pitch": 0,
+        "duration": 0,
+        "tone": 0
+    },
+    {
         "pitch": 57,
         "duration": 4,
         "tone": 6
     },
     {
+        "pitch": 0,
+        "duration": 0,
+        "tone": 0
+    },
+    {
         "pitch": 62,
         "duration": 4,
         "tone": 1
+    },
+    {
+        "pitch": 0,
+        "duration": 0,
+        "tone": 0
     },
     {
         "pitch": 60,
@@ -245,6 +285,11 @@
         "tone": 6
     },
     {
+        "pitch": 0,
+        "duration": 0,
+        "tone": 0
+    },
+    {
         "pitch": 62,
         "duration": 4,
         "tone": 1
@@ -253,6 +298,11 @@
         "pitch": 60,
         "duration": 2,
         "tone": 3
+    },
+    {
+        "pitch": 0,
+        "duration": 0,
+        "tone": 0
     },
     {
         "pitch": 62,
@@ -268,6 +318,11 @@
         "pitch": 62,
         "duration": 4,
         "tone": 2
+    },
+    {
+        "pitch": 0,
+        "duration": 0,
+        "tone": 0
     },
     {
         "pitch": 60,
@@ -301,6 +356,11 @@
     },
     {
         "pitch": 0,
+        "duration": 0,
+        "tone": 0
+    },
+    {
+        "pitch": 0,
         "duration": 4,
         "tone": 0
     },
@@ -318,6 +378,11 @@
         "pitch": 67,
         "duration": 4,
         "tone": 3
+    },
+    {
+        "pitch": 0,
+        "duration": 0,
+        "tone": 0
     },
     {
         "pitch": 0,
@@ -355,6 +420,11 @@
         "tone": 6
     },
     {
+        "pitch": 0,
+        "duration": 0,
+        "tone": 0
+    },
+    {
         "pitch": 62,
         "duration": 2,
         "tone": 6
@@ -365,9 +435,19 @@
         "tone": 4
     },
     {
+        "pitch": 0,
+        "duration": 0,
+        "tone": 0
+    },
+    {
         "pitch": 64,
         "duration": 4,
         "tone": 4
+    },
+    {
+        "pitch": 0,
+        "duration": 0,
+        "tone": 0
     },
     {
         "pitch": 72,
@@ -385,6 +465,11 @@
         "tone": 1
     },
     {
+        "pitch": 0,
+        "duration": 0,
+        "tone": 0
+    },
+    {
         "pitch": 64,
         "duration": 8,
         "tone": 6
@@ -395,14 +480,29 @@
         "tone": 1
     },
     {
+        "pitch": 0,
+        "duration": 0,
+        "tone": 0
+    },
+    {
         "pitch": 69,
         "duration": 4,
         "tone": 1
     },
     {
+        "pitch": 0,
+        "duration": 0,
+        "tone": 0
+    },
+    {
         "pitch": 67,
         "duration": 2,
         "tone": 5
+    },
+    {
+        "pitch": 0,
+        "duration": 0,
+        "tone": 0
     },
     {
         "pitch": 69,
@@ -418,6 +518,11 @@
         "pitch": 67,
         "duration": 4,
         "tone": 1
+    },
+    {
+        "pitch": 0,
+        "duration": 0,
+        "tone": 0
     },
     {
         "pitch": 65,
@@ -460,6 +565,11 @@
         "tone": 3
     },
     {
+        "pitch": 0,
+        "duration": 0,
+        "tone": 0
+    },
+    {
         "pitch": 57,
         "duration": 4,
         "tone": 6
@@ -476,6 +586,11 @@
     },
     {
         "pitch": 0,
+        "duration": 0,
+        "tone": 0
+    },
+    {
+        "pitch": 0,
         "duration": 4,
         "tone": 0
     },
@@ -488,6 +603,11 @@
         "pitch": 62,
         "duration": 4,
         "tone": 4
+    },
+    {
+        "pitch": 0,
+        "duration": 0,
+        "tone": 0
     },
     {
         "pitch": 67,
@@ -511,7 +631,17 @@
     },
     {
         "pitch": 0,
+        "duration": 0,
+        "tone": 0
+    },
+    {
+        "pitch": 0,
         "duration": 4,
+        "tone": 0
+    },
+    {
+        "pitch": 0,
+        "duration": 0,
         "tone": 0
     },
     {
@@ -525,6 +655,11 @@
         "tone": 3
     },
     {
+        "pitch": 0,
+        "duration": 0,
+        "tone": 0
+    },
+    {
         "pitch": 62,
         "duration": 2,
         "tone": 6
@@ -533,6 +668,11 @@
         "pitch": 60,
         "duration": 2,
         "tone": 4
+    },
+    {
+        "pitch": 0,
+        "duration": 0,
+        "tone": 0
     },
     {
         "pitch": 64,
@@ -550,6 +690,11 @@
         "tone": 6
     },
     {
+        "pitch": 0,
+        "duration": 0,
+        "tone": 0
+    },
+    {
         "pitch": 72,
         "duration": 4,
         "tone": 3
@@ -560,9 +705,19 @@
         "tone": 4
     },
     {
+        "pitch": 0,
+        "duration": 0,
+        "tone": 0
+    },
+    {
         "pitch": 69,
         "duration": 4,
         "tone": 6
+    },
+    {
+        "pitch": 0,
+        "duration": 0,
+        "tone": 0
     },
     {
         "pitch": 76,
@@ -585,6 +740,11 @@
         "tone": 3
     },
     {
+        "pitch": 0,
+        "duration": 0,
+        "tone": 0
+    },
+    {
         "pitch": 64,
         "duration": 4,
         "tone": 6
@@ -598,6 +758,11 @@
         "pitch": 64,
         "duration": 2,
         "tone": 1
+    },
+    {
+        "pitch": 0,
+        "duration": 0,
+        "tone": 0
     },
     {
         "pitch": 62,
@@ -620,6 +785,11 @@
         "tone": 1
     },
     {
+        "pitch": 0,
+        "duration": 0,
+        "tone": 0
+    },
+    {
         "pitch": 69,
         "duration": 4,
         "tone": 1
@@ -633,6 +803,11 @@
         "pitch": 62,
         "duration": 4,
         "tone": 5
+    },
+    {
+        "pitch": 0,
+        "duration": 0,
+        "tone": 0
     },
     {
         "pitch": 64,
@@ -760,9 +935,19 @@
         "tone": 6
     },
     {
+        "pitch": 0,
+        "duration": 0,
+        "tone": 0
+    },
+    {
         "pitch": 62,
         "duration": 4,
         "tone": 2
+    },
+    {
+        "pitch": 0,
+        "duration": 0,
+        "tone": 0
     },
     {
         "pitch": 64,
@@ -770,9 +955,19 @@
         "tone": 1
     },
     {
+        "pitch": 0,
+        "duration": 0,
+        "tone": 0
+    },
+    {
         "pitch": 62,
         "duration": 6,
         "tone": 1
+    },
+    {
+        "pitch": 0,
+        "duration": 0,
+        "tone": 0
     },
     {
         "pitch": 60,
@@ -780,9 +975,19 @@
         "tone": 6
     },
     {
+        "pitch": 0,
+        "duration": 0,
+        "tone": 0
+    },
+    {
         "pitch": 62,
         "duration": 4,
         "tone": 1
+    },
+    {
+        "pitch": 0,
+        "duration": 0,
+        "tone": 0
     },
     {
         "pitch": 60,
@@ -850,6 +1055,11 @@
         "tone": 6
     },
     {
+        "pitch": 0,
+        "duration": 0,
+        "tone": 0
+    },
+    {
         "pitch": 62,
         "duration": 4,
         "tone": 1
@@ -885,6 +1095,11 @@
         "tone": 6
     },
     {
+        "pitch": 0,
+        "duration": 0,
+        "tone": 0
+    },
+    {
         "pitch": 62,
         "duration": 4,
         "tone": 1
@@ -910,6 +1125,11 @@
         "tone": 2
     },
     {
+        "pitch": 0,
+        "duration": 0,
+        "tone": 0
+    },
+    {
         "pitch": 60,
         "duration": 8,
         "tone": 5
@@ -923,6 +1143,11 @@
         "pitch": 69,
         "duration": 4,
         "tone": 1
+    },
+    {
+        "pitch": 0,
+        "duration": 0,
+        "tone": 0
     },
     {
         "pitch": 67,
