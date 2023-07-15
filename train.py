@@ -12,21 +12,32 @@ BATCH_SIZE = 16
 SAVE_MODEL_PATH = "model_weights.ckpt"
 PLOT_PATH = "./training_plot.png"
 
+class PitchLoss(keras.layers.Layer):
+    def __init__(self):
+        super().__init__()
+
+    def call(self, input_valid_pitches, output_pitch):
+        # batch_size, last in sequence, whole range of pitches
+        invalid_pitches = 1 - input_valid_pitches[:, -1, :]
+        invalid_pitch_probabilities = keras.layers.Multiply()([invalid_pitches, output_pitch])
+        # loss func: log(x + 1) where x is sum of probabilities over invalid pitches
+        sum = keras.backend.sum(keras.backend.sum(invalid_pitch_probabilities)) * 5 + 1
+        return keras.backend.log(sum)
 
 def build_model():
-    input_layers = dict()
     inputs = dict()
+    LSTM_processed_inputs = dict()
 
     outputs = dict()
 
     # create the model architecture
     for type in input_params:
-        input_layers[type] = keras.layers.Input(shape=(None, param_shapes[type]))
-        tmp = keras.layers.LSTM(param_shapes[type], return_sequences=True)(input_layers[type])
+        inputs[type] = keras.layers.Input(shape=(None, param_shapes[type]))
+        tmp = keras.layers.LSTM(param_shapes[type], return_sequences=True)(inputs[type])
         # slowly increase dropout the farther a tone is
-        inputs[type] = keras.layers.Dropout(max(0, int(type[-1]) - 1.9) ** 0.2 / 2 + 0.15 if type[0:4] == "tone" else 0.4)(tmp)
+        LSTM_processed_inputs[type] = keras.layers.Dropout(max(0, int(type[-1]) - 1.9) ** 0.2 / 2 + 0.15 if type[0:4] == "tone" else 0.4)(tmp)
 
-    combined_input = keras.layers.concatenate(list(inputs.values()))
+    combined_input = keras.layers.concatenate(list(LSTM_processed_inputs.values()))
 
     x = keras.layers.LSTM(512, return_sequences=True)(combined_input)
     x = keras.layers.Dropout(0.4)(x)
@@ -46,6 +57,7 @@ def build_model():
     outputs["duration"] = keras.layers.Dense(param_shapes["duration"], activation="softmax", name="dur.")(tmp)
 
     model = keras.Model(list(inputs.values()), list(outputs.values()))
+    model.add_loss(PitchLoss()(inputs["valid_pitches"], outputs["pitch"]))
 
     # compile model
     model.compile(loss="categorical_crossentropy",
