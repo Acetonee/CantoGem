@@ -1,7 +1,7 @@
 import os
 import json
+import re
 from sys import stdout
-from time import sleep
 
 import music21 as m21
 import numpy as np
@@ -10,6 +10,7 @@ import pycantonese as pc
 RAW_DATA_PATH = "rawdata"
 DATASET_PATH = "dataset"
 MAPPING_PATH = "mappings"
+TESTING_DATASET_PATH = "testing_dataset"
 SEQUENCE_LENGTH = 16
 
 REST_TONE = 0
@@ -39,8 +40,8 @@ with open(os.path.join(MAPPING_PATH, "duration_mapping.json"), "r") as duration_
 with open("intelligible_intervals.json", "r") as interval_file:
     tones_to_intervals = json.load(interval_file)
 
-id_to_pitch = { v: int(k) for k, v in pitch_to_id.items() }
-id_to_duration = { v: int(k) for k, v in duration_to_id.items() }
+id_to_pitch = {v: int(k) for k, v in pitch_to_id.items()}
+id_to_duration = {v: int(k) for k, v in duration_to_id.items()}
 
 # Determine the number of unique names and values
 num_pitch = len(pitch_to_id)
@@ -50,7 +51,8 @@ num_pos_internal = 16
 num_pos_external = 4
 num_when_rest = 8
 
-input_params = ("pitch", "duration", "pos_internal", "pos_external", "valid_pitches") + tuple(["tone_" + str(i) for i in range(8)])
+input_params = ("pitch", "duration", "pos_internal", "pos_external", "valid_pitches") + tuple(
+    ["tone_" + str(i) for i in range(8)])
 output_params = ("pitch", "duration")
 
 param_shapes = {
@@ -131,38 +133,46 @@ def transpose(song):
 
 
 def encode_song(song, time_step=0.25):
-    elements = []
+    encoded_song = []
+    all_tones = get_tone_in_whole_song(song)
     current_note = {"pitch": None, "duration": None, "tone": None}
+
+    num_notes = 0
+    num_unintelligible_intervals = 0
 
     for event in song.flat.notesAndRests:
         if isinstance(event, m21.note.Note):
             if current_note["pitch"] is None:
                 current_note["pitch"] = event.pitch.midi
                 current_note["duration"] = event.duration.quarterLength
-                current_note["tone"] = get_tone(event.lyric)
-                # print(event.lyric)
+                current_note["tone"] = int(all_tones.pop(0))
 
-            elif current_note["pitch"] == event.pitch.midi and event.tie is not None:
+            elif current_note["pitch"] == event.pitch.midi and event.tie is not None and not event.tie.type == "start":
                 current_note["duration"] += event.duration.quarterLength
                 # No need add tone because the note before the tie must have the same tone
 
             else:
-                elements.append({"pitch": current_note["pitch"], "duration": int(current_note["duration"] / time_step),
-                                 "tone": current_note["tone"]})
+                encoded_song.append(
+                    {"pitch": current_note["pitch"], "duration": int(current_note["duration"] / time_step),
+                     "tone": current_note["tone"]})
 
                 # Save last note
                 last_note = {key: value for key, value in current_note.items()}
 
                 current_note["pitch"] = event.pitch.midi
                 current_note["duration"] = event.duration.quarterLength
-                current_note["tone"] = get_tone(event.lyric)
+                current_note["tone"] = int(all_tones.pop(0))
 
-                # Check how many tones are not intelligible, fool the loss function
+                # Check unintelligible intervals
+                num_notes += 1
                 key = str(last_note["tone"]) + "_" + str(current_note["tone"])
                 if key in tones_to_intervals:
                     interval = current_note["pitch"] - last_note["pitch"]
+
                     if interval not in tones_to_intervals[key]:
-                        elements.insert(-2, {"pitch": 0, "duration": 0, "tone": 0})
+                        num_unintelligible_intervals += 1
+                        # encoded_song.insert(-1, {"pitch": 0, "duration": 0, "tone": 0})
+                        encoded_song.append({"pitch": 0, "duration": 0, "tone": 0})
 
         elif isinstance(event, m21.note.Rest):
             if current_note["pitch"] is None:
@@ -175,23 +185,45 @@ def encode_song(song, time_step=0.25):
                 current_note["tone"] = LONG_REST_TONE if current_note["duration"] >= 2 else REST_TONE
 
             else:
-                elements.append({"pitch": current_note["pitch"], "duration": int(current_note["duration"] / time_step),
-                                 "tone": current_note["tone"]})
+                encoded_song.append(
+                    {"pitch": current_note["pitch"], "duration": int(current_note["duration"] / time_step),
+                     "tone": current_note["tone"]})
 
                 current_note["pitch"] = 0
                 current_note["duration"] = event.duration.quarterLength
                 current_note["tone"] = LONG_REST_TONE if current_note["duration"] >= 2 else REST_TONE
 
     if current_note["pitch"] is not None:
-        elements.append({"pitch": current_note["pitch"], "duration": int(current_note["duration"] / time_step),
-                         "tone": current_note["tone"]})
+        encoded_song.append({"pitch": current_note["pitch"], "duration": int(current_note["duration"] / time_step),
+                             "tone": current_note["tone"]})
 
-    return elements
+    unintelligible_percentage = (num_unintelligible_intervals / num_notes) * 100
+    print(f"Unintelligible: {unintelligible_percentage:.2f}%")
+    return encoded_song
 
 
-def get_tone(word):
-    jyutping = pc.characters_to_jyutping(word)
-    return int(jyutping[0][1][-1])
+def get_tone_in_whole_song(song):
+    all_tones = []
+    all_words = ""
+
+    for event in song.flat.notesAndRests:
+        if not isinstance(event, m21.note.Note):
+            continue
+
+        if event.tie is not None and not event.tie.type == "start":
+            continue
+
+        if event.lyric is None:
+            raise AttributeError("Lyrics cannot be null")
+        all_words += event.lyric
+
+    tokens = pc.parse_text(all_words).tokens()
+
+    for token in tokens:
+        tones = [char[-1] for char in re.split(r'(?<=[0-9])(?=[a-zA-Z])', token.jyutping)]
+        all_tones.extend(tones)
+
+    return all_tones
 
 
 def create_mapping(encoded_song):
@@ -215,13 +247,14 @@ def bulk_append(dict_list, new_dict):
     for key, val in new_dict.items():
         dict_list[key].append(val)
 
+
 def process_input_data(data, tones=None):
     pos = 0
     # treat as anticipation if long rest at start of song
     if data[0]["pitch"] == 0 and data[0]["duration"] >= 8:
         pos = -16
 
-    onehot_vector_inputs = { k: [] for k in input_params }
+    onehot_vector_inputs = {k: [] for k in input_params}
 
     for index, element in enumerate(data):
         pitch = int(element["pitch"])
@@ -247,7 +280,7 @@ def process_input_data(data, tones=None):
                 single_input["tone_" + str(i)] = END_TONE if index + i >= len(data) else data[index + i]["tone"]
             else:
                 single_input["tone_" + str(i)] = END_TONE if index + i >= len(tones) else tones[index + i]
-        
+
         valid_intervals = [0] * num_pitch
         interval_idx = str(single_input["tone_0"]) + "_" + str(single_input["tone_1"])
         # if the next tone is a rest, the only valid pitch is rest
@@ -262,19 +295,20 @@ def process_input_data(data, tones=None):
                 new_pitch = str(pitch + interval)
                 if new_pitch in pitch_to_id:
                     valid_intervals[pitch_to_id[new_pitch]] = 1
-        
-        single_input = { k: [int(v == j) for j in range(param_shapes[k])] for k, v in single_input.items() }
+
+        single_input = {k: [int(v == j) for j in range(param_shapes[k])] for k, v in single_input.items()}
         single_input["valid_pitches"] = valid_intervals
 
         bulk_append(onehot_vector_inputs, single_input)
 
     return onehot_vector_inputs
 
+
 def generating_training_sequences(dataset_path=DATASET_PATH):
     # Give the network 4 bars of notes (64 time steps) and 4 bar of tones, with the tone that the target has
 
-    inputs = { k: [] for k in input_params }
-    outputs = { k: [] for k in output_params }
+    inputs = {k: [] for k in input_params}
+    outputs = {k: [] for k in output_params}
 
     for path, _, files in os.walk(dataset_path):
         for fileId, filename in enumerate(files):
@@ -288,7 +322,7 @@ def generating_training_sequences(dataset_path=DATASET_PATH):
                 no_of_inputs = len(data) - SEQUENCE_LENGTH
 
                 onehot_vector_inputs = process_input_data(data)
-                onehot_vector_outputs = { k: [] for k in output_params }
+                onehot_vector_outputs = {k: [] for k in output_params}
 
                 for element in data:
                     pitch = int(element["pitch"])

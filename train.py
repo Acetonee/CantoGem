@@ -1,5 +1,7 @@
+import os
+
 from preprocess import generating_training_sequences
-from preprocess import input_params, output_params, param_shapes
+from preprocess import input_params, TESTING_DATASET_PATH, param_shapes
 from tensorflow import keras
 
 import matplotlib.pyplot as plt
@@ -7,10 +9,12 @@ import matplotlib.pyplot as plt
 INPUT_UNITS = 50
 OUTPUT_UNITS = 30
 LEARNING_RATE = 0.001
-EPOCHS = 90
+EPOCHS = 100
 BATCH_SIZE = 16
-SAVE_MODEL_PATH = "model_weights.ckpt"
-PLOT_PATH = "./training_plot.png"
+BUILD_PATH = "build"
+SAVE_MODEL_PATH = os.path.join(BUILD_PATH, "model_weights.ckpt")
+PLOT_PATH = os.path.join(BUILD_PATH, "training_plot.png")
+
 
 class PitchLoss(keras.layers.Layer):
     def __init__(self):
@@ -24,6 +28,7 @@ class PitchLoss(keras.layers.Layer):
         sum = keras.backend.sum(keras.backend.sum(invalid_pitch_probabilities)) * 5 + 1
         return keras.backend.log(sum)
 
+
 def build_model():
     inputs = dict()
     LSTM_processed_inputs = dict()
@@ -35,7 +40,8 @@ def build_model():
         inputs[type] = keras.layers.Input(shape=(None, param_shapes[type]))
         tmp = keras.layers.LSTM(param_shapes[type], return_sequences=True)(inputs[type])
         # slowly increase dropout the farther a tone is
-        LSTM_processed_inputs[type] = keras.layers.Dropout(max(0, int(type[-1]) - 1.9) ** 0.2 / 2 + 0.15 if type[0:4] == "tone" else 0.4)(tmp)
+        LSTM_processed_inputs[type] = keras.layers.Dropout(
+            max(0, int(type[-1]) - 1.9) ** 0.2 / 2 + 0.15 if type[0:4] == "tone" else 0.4)(tmp)
 
     combined_input = keras.layers.concatenate(list(LSTM_processed_inputs.values()))
 
@@ -73,6 +79,7 @@ def train():
 
     # generate the training sequences
     inputs, targets = generating_training_sequences()
+    testing_inputs, testing_targets = generating_training_sequences(dataset_path=TESTING_DATASET_PATH)
 
     # build the network
     model = build_model()
@@ -81,12 +88,33 @@ def train():
 
     # train the model
     # Create a callback that saves the model's weights
-    cp_callback = keras.callbacks.ModelCheckpoint(filepath=SAVE_MODEL_PATH, verbose=0, save_weights_only=True)
-    model.fit(list(inputs.values()), list(targets.values()), epochs=EPOCHS, batch_size=BATCH_SIZE,
-                        callbacks=[cp_callback])
+    cp_callback = [keras.callbacks.ModelCheckpoint(filepath=SAVE_MODEL_PATH, verbose=0, save_weights_only=True),
+                   keras.callbacks.EarlyStopping(monitor="val_loss", patience=10, verbose=0)]
 
-    # save the model
+    history = model.fit(list(inputs.values()), list(targets.values()), epochs=EPOCHS, batch_size=BATCH_SIZE,
+                        callbacks=[cp_callback], validation_data=(testing_inputs.values(), testing_targets.values()))
+
+    # Save the model
     model.save_weights(SAVE_MODEL_PATH)
+
+    # Evaluate the model
+    print("--- Model evaluation --- ")
+    model.evaluate(x=list(testing_inputs.values()), y=list(testing_targets.values()))
+
+    # Plot the model
+    pitch_accuracies = history.history["pitch_accuracy"]
+    duration_accuracies = history.history["dur._accuracy"]
+
+    plt.plot(range(len(history.history['loss'])), pitch_accuracies, label="Pitch accuracy")
+    plt.plot(range(len(history.history['loss'])), duration_accuracies, label="Duration accuracy")
+
+    plt.legend()
+    plt.xlabel("Epochs")
+    plt.ylabel("Accuracy")
+    plt.title("Training accuracies")
+
+    plt.show()
+    plt.savefig(PLOT_PATH)
 
 
 if __name__ == "__main__":

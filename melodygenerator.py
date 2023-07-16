@@ -1,4 +1,5 @@
 import math
+import os
 
 import numpy as np
 import music21 as m21
@@ -7,7 +8,7 @@ from preprocess import id_to_pitch, id_to_duration
 from preprocess import input_params, output_params
 from preprocess import process_input_data
 
-from train import SAVE_MODEL_PATH, build_model
+from train import SAVE_MODEL_PATH, build_model, BUILD_PATH
 
 
 class MelodyGenerator:
@@ -52,7 +53,7 @@ class MelodyGenerator:
 
         return current_melody
 
-    def save_melody(self, melody, step_duration=0.25, format="midi", file_name="melody.mid"):
+    def save_melody(self, melody, step_duration=0.25, format="midi", file_name=os.path.join(BUILD_PATH, "melody.mid")):
         stream = m21.stream.Stream()
         for note in melody:
             if note["duration"] == 0:
@@ -81,18 +82,20 @@ class MelodyGenerator:
 
         return index
 
+
 def get_bell_sigmoid(min_val, max_val, roughness):
     k = (max_val - min_val) * (1 + math.exp(-roughness / 6)) / (1 - math.exp(-roughness / 6))
     return lambda x: k/(1 + math.exp(roughness * (1/3 - x))) + k/(1+math.exp(roughness * (x - 2/3))) - k + min_val
+
 
 if __name__ == "__main__":
     mg = MelodyGenerator()
     # tones = "4 6 6 1 2 1 2 2 9 3"  # After 9 3
     # 一個人 原來都可以盡興 / 多了人 卻還沒多高興 / 沉默看星 聽到月光呼應 / 繼而平靜 到訪這一人之境
-    tones = "0 1 3 4 0 4 4 1 2 5 6 1 7 1 5 4 0 3 4 6 1 1 1 7 4 6 3 1 0 1 2 6 1 1 1 7 3 4 4 6 0 2 2 5 1 4 1 2"
+    tones = "0 1 3 4 0 4 4 1 2 5 6 3 7 1 5 4 0 3 4 6 1 1 3 7 4 6 3 1 0 1 2 6 1 1 3 7 3 4 4 6 0 3 2 5 1 4 1 2"
     initial_note = {
         "pitch": 0,
-        "duration": 12
+        "duration": 8
     }
 
     melody = mg.generate_melody(initial_note, tones, temperature={
