@@ -88,10 +88,11 @@ def get_bell_sigmoid(min_val, max_val, roughness):
 if __name__ == "__main__":
     mg = MelodyGenerator()
     # tones = "4 6 6 1 2 1 2 2 9 3"  # After 9 3
-    tones = "1 3 4 0 4 4 1 2 5 6 1 0 1 5 4 0 3 4 6 1 1 1 0 4 6 3 1 0 1 2 6 1 1 1 0 3 4 4 6 2 2 5 1 4 1 2"
+    # 一個人 原來都可以盡興 / 多了人 卻還沒多高興 / 沉默看星 聽到月光呼應 / 繼而平靜 到訪這一人之境
+    tones = "0 1 3 4 0 4 4 1 2 5 6 1 7 1 5 4 0 3 4 6 1 1 1 7 4 6 3 1 0 1 2 6 1 1 1 7 3 4 4 6 0 2 2 5 1 4 1 2"
     initial_note = {
-        "pitch": 67,
-        "duration": 2
+        "pitch": 0,
+        "duration": 12
     }
 
     melody = mg.generate_melody(initial_note, tones, temperature={
