@@ -8,9 +8,11 @@ import numpy as np
 import pycantonese as pc
 
 RAW_DATA_PATH = "rawdata"
+RAW_TESTING_DATA_PATH = "rawdata_testing"
 DATASET_PATH = "dataset"
-MAPPING_PATH = "mappings"
 TESTING_DATASET_PATH = "testing_dataset"
+MAPPING_PATH = "mappings"
+
 SEQUENCE_LENGTH = 16
 
 REST_TONE = 0
@@ -66,22 +68,20 @@ for i in range(8):
     param_shapes["tone_" + str(i)] = num_tone
 
 
-def create_datasets_and_mapping(raw_data_path, save_dir):
+def create_datasets_and_mapping(raw_data_paths, save_dirs):
     # load the songs
     print("Loading songs...")
-    encoded_songs = load_songs(raw_data_path)
-    print(f"Loaded {len(encoded_songs)} songs.")
-
     encoded_songs_combined = []
+    for path_idx, raw_data_path in enumerate(raw_data_paths):
+        encoded_songs = load_songs(raw_data_path)
 
-    for i, encoded_song in enumerate(encoded_songs):
-        if encoded_songs_combined is None:
-            encoded_songs_combined = encoded_song.copy()
-        else:
+        for i, encoded_song in enumerate(encoded_songs):
             encoded_songs_combined += encoded_song
 
-        with open(os.path.join(save_dir, str(i) + ".json"), "w") as fp:
-            json.dump(encoded_song, fp, indent=4)
+            with open(os.path.join(save_dirs[path_idx], str(i) + ".json"), "w") as fp:
+                json.dump(encoded_song, fp, indent=4)
+
+    print(f"Loaded {len(encoded_songs_combined)} songs.")
 
     create_mapping(encoded_songs_combined)
 
@@ -352,7 +352,7 @@ def generating_training_sequences(dataset_path=DATASET_PATH):
 
 
 def main():
-    create_datasets_and_mapping(RAW_DATA_PATH, DATASET_PATH)
+    create_datasets_and_mapping([RAW_DATA_PATH, RAW_TESTING_DATA_PATH], [DATASET_PATH, TESTING_DATASET_PATH])
 
 
 if __name__ == "__main__":
