@@ -1,14 +1,24 @@
 import math
 import os
+import re
 
 import numpy as np
 import music21 as m21
+import pycantonese as pc
 
-from preprocess import id_to_pitch, id_to_duration
+from preprocess import id_to_pitch, id_to_duration, pitch_to_id, duration_to_id
 from preprocess import input_params, output_params
 from preprocess import process_input_data
 
+from preprocess import SEQUENCE_LENGTH, PAD_TONE, REST_TONE, LONG_REST_TONE, END_TONE
+
 from train import SAVE_MODEL_PATH, build_model, BUILD_PATH
+
+from harmoniser import harmonise, CHORD_DURATION
+from synthesizer import synthesize
+
+CHORD_REFERENCE_DO = 36
+MIDI_SAVE_PATH = os.path.join(BUILD_PATH, "melody.mid")
 
 
 class MelodyGenerator:
@@ -19,46 +29,55 @@ class MelodyGenerator:
         self.model.load_weights(SAVE_MODEL_PATH).expect_partial()
 
     def onehot_input_from_seed(self, data, tones):
-        onehot_input_dict = process_input_data(data, tones)
-        onehot_input = [ onehot_input_dict[k] for k in input_params ]
+        onehot_input_dict = process_input_data(
+            [{"pitch": 1, "duration": 0} for _ in range(SEQUENCE_LENGTH)] + data,
+            [{"tone": PAD_TONE, "phrasing": 0} for _ in range(SEQUENCE_LENGTH)] + tones
+        )
+        onehot_input = [onehot_input_dict[k] for k in input_params]
 
         for i, onehot_vectors in enumerate(onehot_input):
             onehot_input[i] = np.array(onehot_vectors)[np.newaxis, ...]
         return onehot_input
 
-    def generate_melody(self, first_note, all_tones, temperature):
-
-        all_tones = list(map(lambda x: int(x), all_tones.split()))
-
+    def generate_melody(self, all_tones, temperature):
         # create seed with start symbols
-        current_melody = [first_note]
+        current_melody = []
 
-        for _ in range(len(all_tones) - 1):
+        for _ in range(len(all_tones)):
             # create seed with start symbols
             onehot_seed = self.onehot_input_from_seed(current_melody, all_tones)
 
+            valid_pitches = onehot_seed[input_params.index("valid_pitches")][0, -1]
+
             # make a prediction
             probabilities = self.model.predict(onehot_seed)
+            if np.sum(valid_pitches) > 0:
+                probabilities[output_params.index("pitch")][0] *= (valid_pitches + 0.000005)
+            """if all_tones[_]["tone"] in {REST_TONE, LONG_REST_TONE}:
+                probabilities[0][0, pitch_to_id["0"]] = 100.0
+            else:
+                probabilities[0][0, pitch_to_id["0"]] = 0.0"""
 
             # choose semi-random note from probability distribution (pitch class, duration class)
+            # temperature: temperature[key]((_ + 1) / len(all_tones)
             output_note = {
-                key: self._sample_with_temperature(probabilities[index][0], temperature[key]((_ + 1) / len(all_tones)))
+                key: self._sample_with_temperature(probabilities[index][0], 0.1)
                 for index, key in enumerate(output_params)
             }
 
             output_note["pitch"] = id_to_pitch[output_note["pitch"]]
             output_note["duration"] = id_to_duration[output_note["duration"]]
+            print (output_note)
 
             current_melody.append(output_note)
 
         return current_melody
 
-    def save_melody(self, melody, step_duration=0.25, format="midi", file_name=os.path.join(BUILD_PATH, "melody.mid")):
+    def save_melody(self, melody, step_duration=0.25, format="midi", midi_path=MIDI_SAVE_PATH):
         stream = m21.stream.Stream()
         for note in melody:
             if note["duration"] == 0:
                 continue
-            m21_event = m21.note.Rest(0)
             # 0 is shorthand for a rest
             if note["pitch"] == 0:
                 m21_event = m21.note.Rest(quarterLength=note["duration"] * step_duration)
@@ -66,7 +85,18 @@ class MelodyGenerator:
                 m21_event = m21.note.Note(note["pitch"], quarterLength=note["duration"] * step_duration)
             stream.append(m21_event)
 
-        stream.write(format, file_name)
+        # Save the chords as well
+        chord_progression = harmonise(melody)
+        chords = [chord.construct_chord(CHORD_REFERENCE_DO) for chord in chord_progression]
+        total_duration = sum([note["duration"] for note in melody])
+
+        for i in range(0, total_duration, CHORD_DURATION):
+            new_chord = m21.chord.Chord(chords[i // CHORD_DURATION], quarterLength=CHORD_DURATION // 4)
+            new_chord.volume = m21.volume.Volume(velocity=60)
+            stream.insert(i // 4, new_chord)
+
+        stream.write(format, midi_path)
+        synthesize(midi_path)
         print(melody)
         print("Melody saved")
 
@@ -85,22 +115,55 @@ class MelodyGenerator:
 
 def get_bell_sigmoid(min_val, max_val, roughness):
     k = (max_val - min_val) * (1 + math.exp(-roughness / 6)) / (1 - math.exp(-roughness / 6))
-    return lambda x: k/(1 + math.exp(roughness * (1/3 - x))) + k/(1+math.exp(roughness * (x - 2/3))) - k + min_val
+    return lambda x: k / (1 + math.exp(roughness * (1 / 3 - x))) + k / (
+            1 + math.exp(roughness * (x - 2 / 3))) - k + min_val
+
+
+def parse_lyrics(lyrics):
+
+    rest_tones_pos = []
+    for char in lyrics:
+        if char == "/":
+            rest_tones_pos.append(REST_TONE)
+        elif char == "|":
+            rest_tones_pos.append(LONG_REST_TONE)
+        else:
+            rest_tones_pos.append(0)
+
+    pure_words = lyrics.replace("/", "").replace("|", "")
+    all_tones = []
+
+    tokens = pc.parse_text(pure_words).tokens()
+
+    for token in tokens:
+        print(token)
+        anglicised_words = re.split(r'(?<=[0-9])(?=[a-zA-Z])', token.jyutping)
+        tones = [{"tone": int(char[-1]), "phrasing": len(anglicised_words) - idx} for idx, char in
+                 enumerate(anglicised_words)]
+        all_tones.extend(tones)
+
+    for i in range(len(lyrics)):
+        if rest_tones_pos[i] != 0:
+            all_tones.insert(i, {"tone": rest_tones_pos[i], "phrasing": 5})
+
+    return all_tones
 
 
 if __name__ == "__main__":
     mg = MelodyGenerator()
-    # tones = "4 6 6 1 2 1 2 2 9 3"  # After 9 3
-    # 一個人 原來都可以盡興 / 多了人 卻還沒多高興 / 沉默看星 聽到月光呼應 / 繼而平靜 到訪這一人之境
-    tones = "0 1 3 4 0 4 4 1 2 5 6 3 7 1 5 4 0 3 4 6 1 1 3 7 4 6 3 1 0 1 2 6 1 1 3 7 3 4 4 6 0 3 2 5 1 4 1 2"
-    initial_note = {
-        "pitch": 0,
-        "duration": 12
-    }
 
-    melody = mg.generate_melody(initial_note, tones, temperature={
+    tones = parse_lyrics("/大江東去/浪淘盡/千古風流人物|"
+                    "故壘西邊/人道是/三國周郎赤壁|"
+                    "亂石崩雲/驚濤裂岸/捲起千堆雪|"
+                    "江山如畫/一時多少豪傑|"
+                    "遙想公瑾當年/小喬初嫁了/雄姿英發|"
+                    "羽扇綸巾/談笑間/檣櫓灰飛煙滅|"
+                    "故國神遊/多情應笑我/早生華髮|"
+                    "人生如夢/一尊還酹江月")
+
+    melody = mg.generate_melody(tones, temperature={
         # temperature
-        "pitch": get_bell_sigmoid(min_val=0.1, max_val=0.4, roughness=10),
+        "pitch": get_bell_sigmoid(min_val=0.1, max_val=0.3, roughness=10),
         "duration": get_bell_sigmoid(min_val=0.05, max_val=0.2, roughness=10)
     })
     mg.save_melody(melody)

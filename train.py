@@ -6,11 +6,9 @@ from tensorflow import keras
 
 import matplotlib.pyplot as plt
 
-INPUT_UNITS = 50
-OUTPUT_UNITS = 30
-LEARNING_RATE = 0.001
+LEARNING_RATE = 0.002
 EPOCHS = 100
-BATCH_SIZE = 16
+BATCH_SIZE = 50
 BUILD_PATH = "build"
 SAVE_MODEL_PATH = os.path.join(BUILD_PATH, "model_weights.ckpt")
 PLOT_PATH = os.path.join(BUILD_PATH, "training_plot.png")
@@ -24,9 +22,29 @@ class PitchLoss(keras.layers.Layer):
         # batch_size, last in sequence, whole range of pitches
         invalid_pitches = 1 - input_valid_pitches[:, -1, :]
         invalid_pitch_probabilities = keras.layers.Multiply()([invalid_pitches, output_pitch])
-        # loss func: log(x + 1) where x is sum of probabilities over invalid pitches
-        sum = keras.backend.sum(keras.backend.sum(invalid_pitch_probabilities)) * 5 + 1
-        return keras.backend.log(sum)
+        # calculates the probability of invalid pitch averaged over batch size
+        sum = keras.backend.sum(keras.backend.sum(invalid_pitch_probabilities)) * (1 / BATCH_SIZE)
+        return keras.backend.log(sum * 5 + 1) * 2
+
+
+# Optimised using keras tuner
+INPUT_DROPOUTS = {
+    "pitch": 0.4,
+    "duration": 0.3,
+    "pos_internal": 0.2,
+    "pos_external": 0.3,
+    "valid_pitches": 0.4,
+    "tone_0": 0.8,
+    "tone_1": 0.2,
+    "tone_2": 0.3,
+    "tone_3": 0.4,
+    "tone_4": 0.5,
+    "tone_5": 0.6,
+    "tone_6": 0.7,
+    "tone_7": 0.8,
+    # phrasing still not accounted for, just put random here
+    "phrasing": 0.6,
+}
 
 
 def build_model():
@@ -40,26 +58,26 @@ def build_model():
         inputs[type] = keras.layers.Input(shape=(None, param_shapes[type]))
         tmp = keras.layers.LSTM(param_shapes[type], return_sequences=True)(inputs[type])
         # slowly increase dropout the farther a tone is
-        LSTM_processed_inputs[type] = keras.layers.Dropout(
-            max(0, int(type[-1]) - 1.9) ** 0.2 / 2 + 0.15 if type[0:4] == "tone" else 0.4)(tmp)
+        LSTM_processed_inputs[type] = keras.layers.Dropout(INPUT_DROPOUTS[type])(tmp)
 
     combined_input = keras.layers.concatenate(list(LSTM_processed_inputs.values()))
 
-    x = keras.layers.LSTM(512, return_sequences=True)(combined_input)
-    x = keras.layers.Dropout(0.4)(x)
-    x = keras.layers.LSTM(512)(x)
+    x = keras.layers.LSTM(128, return_sequences=True)(combined_input)
+    x = keras.layers.Dropout(0.5)(x)
+    x = keras.layers.LSTM(384)(x)
     x = keras.layers.BatchNormalization()(x)
-    x = keras.layers.Dropout(0.3)(x)
-    x = keras.layers.Dense(256, activation="relu")(x)
+    x = keras.layers.Dropout(0.2)(x)
+    x = keras.layers.Dense(384, activation="relu")(x)
 
-    tmp = keras.layers.Dense(128, activation="relu")(x)
+    tmp = keras.layers.Dense(384, activation="relu")(x)
     tmp = keras.layers.BatchNormalization()(tmp)
-    tmp = keras.layers.Dropout(0.2)(tmp)
+    tmp = keras.layers.Dropout(0.4)(tmp)
     outputs["pitch"] = keras.layers.Dense(param_shapes["pitch"], activation="softmax", name="pitch")(tmp)
+
     tmp = keras.layers.Dropout(0.8)(outputs["pitch"])
     tmp = keras.layers.Dense(128, activation="relu")(keras.layers.concatenate([x, tmp]))
     tmp = keras.layers.BatchNormalization()(tmp)
-    tmp = keras.layers.Dropout(0.2)(tmp)
+    tmp = keras.layers.Dropout(0.7)(tmp)
     outputs["duration"] = keras.layers.Dense(param_shapes["duration"], activation="softmax", name="dur.")(tmp)
 
     model = keras.Model(list(inputs.values()), list(outputs.values()))
@@ -89,7 +107,7 @@ def train():
     # train the model
     # Create a callback that saves the model's weights
     cp_callback = [keras.callbacks.ModelCheckpoint(filepath=SAVE_MODEL_PATH, verbose=0, save_weights_only=True),
-                   keras.callbacks.EarlyStopping(monitor="val_loss", patience=10, verbose=0)]
+                   keras.callbacks.EarlyStopping(monitor="val_loss", patience=500, verbose=0)]
 
     history = model.fit(list(inputs.values()), list(targets.values()), epochs=EPOCHS, batch_size=BATCH_SIZE,
                         callbacks=[cp_callback], validation_data=(testing_inputs.values(), testing_targets.values()))
