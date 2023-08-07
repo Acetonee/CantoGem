@@ -10,9 +10,10 @@ def hello_world():
 @app.route("/get-lyrics/<lyrics>")
 def send_melody(lyrics):
     make_melody_response(lyrics)
-    with open(MIDI_SAVE_PATH, "r") as midi_file:
-        response = make_response(midi_file)
-    response.headers.set('Content-Type', 'audio/midi')
-    return response
+    with open(MIDI_SAVE_PATH, "rb") as midi_file:
+        response = make_response(midi_file.read())
+        response.headers.set('Content-Type', 'audio/midi')
+        return response
 
-app.run()
+if __name__ == "main":
+    app.run()

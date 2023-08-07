@@ -53,7 +53,7 @@ class MelodyGenerator:
             # make a prediction
             probabilities = self.model.predict(onehot_seed)
             probabilities[output_params.index("duration")][0][duration_to_id["0"]] = 0.0
-            if np.sum(valid_pitches) > 0:
+            if np.sum(probabilities[output_params.index("pitch")][0] * (valid_pitches + 0.000005)) > 0:
                 probabilities[output_params.index("pitch")][0] *= (valid_pitches + 0.000005)
             """if all_tones[_]["tone"] in {REST_TONE, LONG_REST_TONE}:
                 probabilities[0][0, pitch_to_id["0"]] = 100.0
@@ -110,6 +110,8 @@ class MelodyGenerator:
         # temperature -> infinity -> Homogenous distribution
         # temperature -> 0 -> deterministic
         # temperature -> 1 -> keep probabilities
+        # normalised probabilities again to guarantee floating point errors won't round stuff down to 0 in power step
+        probabilities = probabilities / np.sum(probabilities)
         probabilities = np.power(probabilities, 1 / temperature)
         probabilities = probabilities / np.sum(probabilities)
 
@@ -139,7 +141,7 @@ def parse_lyrics(lyrics):
     pure_words = lyrics.replace(",", "").replace("|", "")
     all_tones = []
 
-    segmenter = Segmenter(disallow={"一個人"})
+    segmenter = Segmenter(disallow={"一個人"}, allow={"大江"})
     tokens = pc.parse_text(pure_words, segment_kwargs={"cls": segmenter}).tokens()
 
     for token in tokens:
@@ -156,9 +158,10 @@ def parse_lyrics(lyrics):
     print("Finished lyrics parsing")
     return all_tones
 
+mg = MelodyGenerator()
+
 def make_melody_response(lyrics):
     print("Starting melody generation")
-    mg = MelodyGenerator()
 
     tones = parse_lyrics(lyrics)
     print("Generating")
@@ -171,4 +174,11 @@ def make_melody_response(lyrics):
     mg.save_melody(melody)
 
 if __name__ == "__main__":
-    make_melody_response("一個人,原來都可以盡興|多了人,卻還沒多高興|沉默看星,聽到月光呼應")
+    make_melody_response(",大江東去,浪淘盡,千古風流人物|"
+                    "故壘西邊,人道是,三國周郎赤壁|"
+                    "亂石崩雲,驚濤裂岸,捲起千堆雪|"
+                    "江山如畫,一時多少豪傑|"
+                    "遙想公瑾當年,小喬初嫁了,雄姿英發|"
+                    "羽扇綸巾,談笑間,檣櫓灰飛煙滅|"
+                    "故國神遊,多情應笑我,早生華髮|"
+                    "人生如夢,一尊還酹江月")
