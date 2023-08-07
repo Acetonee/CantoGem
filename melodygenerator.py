@@ -21,6 +21,7 @@ from synthesizer import synthesize
 CHORD_REFERENCE_DO = 36
 MIDI_SAVE_PATH = os.path.join(BUILD_PATH, "melody.mid")
 
+PROGRESS_PATH = os.path.join("serverside", "progressbar.txt")
 
 class MelodyGenerator:
 
@@ -43,6 +44,9 @@ class MelodyGenerator:
     def generate_melody(self, all_tones, temperature):
         # create seed with start symbols
         current_melody = []
+
+        with open(PROGRESS_PATH, "w") as progressbar_file:
+            progressbar_file.write("0.00%")
 
         for _ in range(len(all_tones)):
             # create seed with start symbols
@@ -72,6 +76,10 @@ class MelodyGenerator:
             print (output_note)
 
             current_melody.append(output_note)
+
+            with open(PROGRESS_PATH, "w") as progressbar_file:
+                progressbar_file.write("{:.2f}%".format((_ + 1) * 100 / len(all_tones)))
+
 
         return current_melody
 

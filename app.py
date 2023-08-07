@@ -1,5 +1,5 @@
 from flask import *
-from melodygenerator import make_melody_response, MIDI_SAVE_PATH
+from melodygenerator import make_melody_response, MIDI_SAVE_PATH, PROGRESS_PATH
 
 app = Flask(__name__)
 
@@ -14,6 +14,11 @@ def send_melody(lyrics):
         response = make_response(midi_file.read())
         response.headers.set('Content-Type', 'audio/midi')
         return response
+
+@app.route("/progress")
+def get_progress():
+    with open(PROGRESS_PATH, "r") as progressbar_file:
+        return progressbar_file.read()
 
 if __name__ == "main":
     app.run()
