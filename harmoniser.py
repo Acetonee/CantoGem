@@ -33,6 +33,9 @@ class Chord:
             score[self.base_note % 12] = score[(self.base_note + 3) % 12] = score[(self.base_note + 6) % 12] = 1
             score[(self.base_note + 10) % 12] = score[(self.base_note + 9) % 12] = 0.5
             score[(self.base_note + 5) % 12] = 0.1
+            # Always choose C dominant7 if BFlat
+            if self.scale_degree == 3:
+                score[10] = 1000
 
         return score
 
@@ -56,7 +59,8 @@ chord_list = {
     "IV": Chord(4, 5, "major"),
     "V": Chord(5, 7, "major"),
     "vi": Chord(6, 9, "minor"),
-    "vii": Chord(7, 11, "diminished")
+    "vii": Chord(7, 11, "diminished"),
+    "bFlat": Chord(3, 4, "diminished")
 }
 
 

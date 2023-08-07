@@ -5,6 +5,7 @@ import re
 import numpy as np
 import music21 as m21
 import pycantonese as pc
+from pycantonese.word_segmentation import Segmenter
 
 from preprocess import id_to_pitch, id_to_duration, pitch_to_id, duration_to_id
 from preprocess import input_params, output_params
@@ -51,6 +52,7 @@ class MelodyGenerator:
 
             # make a prediction
             probabilities = self.model.predict(onehot_seed)
+            probabilities[output_params.index("duration")][0][duration_to_id["0"]] = 0.0
             if np.sum(valid_pitches) > 0:
                 probabilities[output_params.index("pitch")][0] *= (valid_pitches + 0.000005)
             """if all_tones[_]["tone"] in {REST_TONE, LONG_REST_TONE}:
@@ -96,9 +98,13 @@ class MelodyGenerator:
             stream.insert(i // 4, new_chord)
 
         stream.write(format, midi_path)
-        synthesize(midi_path)
         print(melody)
         print("Melody saved")
+        try:
+            synthesize(midi_path)
+        except:
+            print("I hate windows")
+            return
 
     def _sample_with_temperature(self, probabilities, temperature):
         # temperature -> infinity -> Homogenous distribution
@@ -120,7 +126,7 @@ def get_bell_sigmoid(min_val, max_val, roughness):
 
 
 def parse_lyrics(lyrics):
-
+    print("parsing lyrics:", lyrics)
     rest_tones_pos = []
     for char in lyrics:
         if char == ",":
@@ -133,7 +139,8 @@ def parse_lyrics(lyrics):
     pure_words = lyrics.replace(",", "").replace("|", "")
     all_tones = []
 
-    tokens = pc.parse_text(pure_words).tokens()
+    segmenter = Segmenter(disallow={"一個人"})
+    tokens = pc.parse_text(pure_words, segment_kwargs={"cls": segmenter}).tokens()
 
     for token in tokens:
         print(token)
@@ -146,20 +153,15 @@ def parse_lyrics(lyrics):
         if rest_tones_pos[i] != 0:
             all_tones.insert(i, {"tone": rest_tones_pos[i], "phrasing": 5})
 
+    print("Finished lyrics parsing")
     return all_tones
 
-
-if __name__ == "__main__":
+def make_melody_response(lyrics):
+    print("Starting melody generation")
     mg = MelodyGenerator()
 
-    tones = parse_lyrics(",大江東去,浪淘盡,千古風流人物|"
-                    "故壘西邊,人道是,三國周郎赤壁|"
-                    "亂石崩雲,驚濤裂岸,捲起千堆雪|"
-                    "江山如畫,一時多少豪傑|"
-                    "遙想公瑾當年,小喬初嫁了,雄姿英發|"
-                    "羽扇綸巾,談笑間,檣櫓灰飛煙滅|"
-                    "故國神遊,多情應笑我,早生華髮|"
-                    "人生如夢,一尊還酹江月")
+    tones = parse_lyrics(lyrics)
+    print("Generating")
 
     melody = mg.generate_melody(tones, temperature={
         # temperature
@@ -167,3 +169,6 @@ if __name__ == "__main__":
         "duration": get_bell_sigmoid(min_val=0.05, max_val=0.2, roughness=10)
     })
     mg.save_melody(melody)
+
+if __name__ == "__main__":
+    make_melody_response("一個人,原來都可以盡興|多了人,卻還沒多高興|沉默看星,聽到月光呼應")
