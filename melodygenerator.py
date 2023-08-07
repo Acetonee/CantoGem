@@ -123,14 +123,14 @@ def parse_lyrics(lyrics):
 
     rest_tones_pos = []
     for char in lyrics:
-        if char == "/":
+        if char == ",":
             rest_tones_pos.append(REST_TONE)
         elif char == "|":
             rest_tones_pos.append(LONG_REST_TONE)
         else:
             rest_tones_pos.append(0)
 
-    pure_words = lyrics.replace("/", "").replace("|", "")
+    pure_words = lyrics.replace(",", "").replace("|", "")
     all_tones = []
 
     tokens = pc.parse_text(pure_words).tokens()
@@ -152,14 +152,14 @@ def parse_lyrics(lyrics):
 if __name__ == "__main__":
     mg = MelodyGenerator()
 
-    tones = parse_lyrics("/大江東去/浪淘盡/千古風流人物|"
-                    "故壘西邊/人道是/三國周郎赤壁|"
-                    "亂石崩雲/驚濤裂岸/捲起千堆雪|"
-                    "江山如畫/一時多少豪傑|"
-                    "遙想公瑾當年/小喬初嫁了/雄姿英發|"
-                    "羽扇綸巾/談笑間/檣櫓灰飛煙滅|"
-                    "故國神遊/多情應笑我/早生華髮|"
-                    "人生如夢/一尊還酹江月")
+    tones = parse_lyrics(",大江東去,浪淘盡,千古風流人物|"
+                    "故壘西邊,人道是,三國周郎赤壁|"
+                    "亂石崩雲,驚濤裂岸,捲起千堆雪|"
+                    "江山如畫,一時多少豪傑|"
+                    "遙想公瑾當年,小喬初嫁了,雄姿英發|"
+                    "羽扇綸巾,談笑間,檣櫓灰飛煙滅|"
+                    "故國神遊,多情應笑我,早生華髮|"
+                    "人生如夢,一尊還酹江月")
 
     melody = mg.generate_melody(tones, temperature={
         # temperature
