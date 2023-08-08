@@ -12,7 +12,7 @@ PROJECT_NAME = "CantoGem"
 
 class PitchLoss(keras.layers.Layer):
     def _init_(self):
-        super()._init_()
+        super().__init__()
 
     def call(self, input_valid_pitches, output_pitch):
         # batch_size, last in sequence, whole range of pitches
