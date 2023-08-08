@@ -6,7 +6,7 @@ from tensorflow import keras
 
 import matplotlib.pyplot as plt
 
-LEARNING_RATE = 0.002
+LEARNING_RATE = 0.001
 EPOCHS = 100
 BATCH_SIZE = 50
 BUILD_PATH = "build"
@@ -15,8 +15,8 @@ PLOT_PATH = os.path.join(BUILD_PATH, "training_plot.png")
 
 
 class PitchLoss(keras.layers.Layer):
-    def __init__(self):
-        super().__init__()
+    def _init_(self):
+        super()._init_()
 
     def call(self, input_valid_pitches, output_pitch):
         # batch_size, last in sequence, whole range of pitches
@@ -27,22 +27,15 @@ class PitchLoss(keras.layers.Layer):
         return keras.backend.log(sum * 5 + 1) * 2
 
 
-# Optimised using keras tuner
 INPUT_DROPOUTS = {
-    "pitch": 0.4,
-    "duration": 0.3,
+    "pitch": 0.2,
+    "duration": 0.2,
     "pos_internal": 0.2,
-    "pos_external": 0.3,
-    "valid_pitches": 0.4,
-    "tone_0": 0.8,
-    "tone_1": 0.2,
-    "tone_2": 0.3,
-    "tone_3": 0.4,
-    "tone_4": 0.5,
-    "tone_5": 0.6,
-    "tone_6": 0.7,
-    "tone_7": 0.8,
-    # phrasing still not accounted for, just put random here
+    "pos_external": 0.2,
+    "valid_pitches": 0.2,
+    "current_tone": 0.2,
+    "next_tone": 0.2,
+    "when_end": 0.6,
     "phrasing": 0.6,
 }
 
@@ -107,7 +100,7 @@ def train():
     # train the model
     # Create a callback that saves the model's weights
     cp_callback = [keras.callbacks.ModelCheckpoint(filepath=SAVE_MODEL_PATH, verbose=0, save_weights_only=True),
-                   keras.callbacks.EarlyStopping(monitor="val_loss", patience=500, verbose=0)]
+                   keras.callbacks.EarlyStopping(monitor="val_loss", patience=5, verbose=0)]
 
     history = model.fit(list(inputs.values()), list(targets.values()), epochs=EPOCHS, batch_size=BATCH_SIZE,
                         callbacks=[cp_callback], validation_data=(testing_inputs.values(), testing_targets.values()))

@@ -18,9 +18,11 @@ SEQUENCE_LENGTH = 64
 REST_TONE = 7
 LONG_REST_TONE = 8
 PAD_TONE = 0
-SEPARATOR_TONE = 10
 END_TONE = 9
-TESTING_DATASET_PATH = "testing_dataset"
+SEPARATOR_TONE = 10
+
+PAD_NOTE = {"tone": PAD_TONE, "pitch": 1, "duration": 0, "phrasing": 0}
+SEPARATOR_TONE = {"tone": SEPARATOR_TONE, "pitch": 1, "duration": 0, "phrasing": 5}
 
 ACCEPTABLE_DURATIONS = [
     0.25,
@@ -36,6 +38,8 @@ ACCEPTABLE_DURATIONS = [
     3.5,
     4
 ]
+PITCH_LOWER_LIMIT = 55  # G3
+PITCH_UPPER_LIMIT = 79
 
 with open(os.path.join(MAPPING_PATH, "pitch_mapping.json"), "r") as pitch_file:
     pitch_to_id = json.load(pitch_file)
@@ -49,36 +53,36 @@ with open("intelligible_intervals.json", "r") as interval_file:
 id_to_pitch = {v: int(k) for k, v in pitch_to_id.items()}
 id_to_duration = {v: int(k) for k, v in duration_to_id.items()}
 
-# Determine the number of unique names and values
 num_pitch = len(pitch_to_id)
 num_duration = len(duration_to_id)
 num_tone = 11
-num_pos_internal = 16
+num_pos_internal = 15
 num_pos_external = 4
 num_phrasing = 6
-num_when_rest = 8
+num_when_end = 64
 
-input_params = ("pitch", "duration", "pos_internal", "pos_external", "valid_pitches", "phrasing") + tuple(
-    ["tone_" + str(i) for i in range(8)])
+input_params = ("pitch", "duration", "pos_internal", "pos_external", "valid_pitches", "phrasing", "current_tone",
+                "next_tone", "when_end")
 output_params = ("pitch", "duration")
 
 param_shapes = {
     "pitch": num_pitch,
     "duration": num_duration,
-    "pos_internal": num_pos_internal,
-    "pos_external": num_pos_external,
+    "pos_internal": num_pos_internal,  # Note position within a single bar
+    "pos_external": num_pos_external,  # Note position within 4-bar phrase
     "valid_pitches": num_pitch,
     "phrasing": num_phrasing,
+    "current_tone": num_tone,
+    "next_tone": num_tone,
+    "when_end": num_when_end
 }
-for i in range(8):
-    param_shapes["tone_" + str(i)] = num_tone
 
 
 def create_datasets_and_mapping(raw_data_paths, save_dirs):
     # load the songs
     print("Loading songs...")
     encoded_songs_combined = []
-    num_songs = 0
+
     for path_idx, raw_data_path in enumerate(raw_data_paths):
         encoded_songs = load_songs(raw_data_path)
         num_songs = len(encoded_songs)
@@ -121,7 +125,8 @@ def is_acceptable(song):
             highest_note = max(highest_note, note.pitch.midi)
         if note.duration.quarterLength not in ACCEPTABLE_DURATIONS:
             return False
-    if highest_note - lowest_note > 24:
+
+    if highest_note - lowest_note > PITCH_UPPER_LIMIT - PITCH_LOWER_LIMIT:
         return False
     return True
 
@@ -150,10 +155,11 @@ def transpose(song):
         if isinstance(event, m21.note.Note):
             lowest_note = min(lowest_note, event.pitch.midi)
             highest_note = max(highest_note, event.pitch.midi)
-    
-    # 55 is G3
-    if lowest_note < 55:
+
+    if lowest_note < PITCH_LOWER_LIMIT:
         transposed_song = transposed_song.transpose(12)
+    elif lowest_note > PITCH_UPPER_LIMIT:
+        transposed_song = transposed_song.transpose(-12)
 
     return transposed_song
 
@@ -178,12 +184,10 @@ def encode_song(song, time_step=0.25):
                 current_note["duration"] += event.duration.quarterLength
                 continue
             else:
-                # General case
                 encoded_song.append(
                     {"pitch": current_note["pitch"], "duration": int(current_note["duration"] / time_step),
                      "tone": current_note["tone"], "phrasing": current_note["phrasing"]})
 
-                # Save last note
                 last_note = {key: value for key, value in current_note.items()}
 
                 current_note.update({"pitch": event.pitch.midi, "duration": event.duration.quarterLength,
@@ -197,11 +201,9 @@ def encode_song(song, time_step=0.25):
                     interval = current_note["pitch"] - last_note["pitch"]
                     if interval not in tones_to_intervals[key]:
                         num_unintelligible_intervals += 1
-                        encoded_song.append({"pitch": 1, "duration": 0, "tone": SEPARATOR_TONE, "phrasing": 5})
+                        encoded_song.append(SEPARATOR_TONE)
 
         elif isinstance(event, m21.note.Rest):
-
-            # Start of the song
             if current_note["pitch"] is None:
                 current_note.update({"pitch": 0, "duration": event.duration.quarterLength,
                                      "tone": LONG_REST_TONE if event.duration.quarterLength >= 2 else REST_TONE,
@@ -215,7 +217,6 @@ def encode_song(song, time_step=0.25):
                 current_note["phrasing"] = 0
                 continue
             else:
-                # General case
                 encoded_song.append(
                     {"pitch": current_note["pitch"], "duration": int(current_note["duration"] / time_step),
                      "tone": current_note["tone"], "phrasing": current_note["phrasing"]})
@@ -261,9 +262,9 @@ def convert_song_to_lyric_data(song):
 
 
 def create_mapping(encoded_song):
-    # "pitch": 1 is used to pad the start of a song, so we need to add it
+    # "pitch": 1 and "duration": 0 is used to pad the start of a song, so we need to add it
     unique_pitches = list(set([element["pitch"] for element in encoded_song] + [1]))
-    unique_durations = list(set([element["duration"] for element in encoded_song]))
+    unique_durations = list(set([element["duration"] for element in encoded_song] + [0]))
     unique_pitches.sort()
     unique_durations.sort()
 
@@ -290,65 +291,60 @@ def process_input_data(data, tones=None):
         pos = -16
 
     onehot_vector_inputs = {k: [] for k in input_params}
+    tone_data = data if tones is None else tones
 
     for index, element in enumerate(data):
-        pitch = int(element["pitch"])
-        duration = int(element["duration"])
+        pitch = element["pitch"]
+        duration = element["duration"]
 
         pitch_id = pitch_to_id[str(pitch)]
         duration_id = duration_to_id[str(duration)]
 
         pos += duration
+        when_end = len(tone_data) - index - 1
+
+        current_tone = tone_data[index]["tone"]
+        next_tone = tone_data[index + 1]["tone"] if index + 1 < len(tone_data) else END_TONE
+        next_pitch = data[index + 1]["pitch"] if index + 1 < len(data) else 0
 
         single_input = {
             "pitch": pitch_id,
             "duration": duration_id,
-            # Note position within a single bar
             "pos_internal": pos % 16,
-            # Note position within 4-bar phrase
             "pos_external": (pos // 16) % 4,
-            "phrasing": int(element["phrasing"]) if tones is None else tones[index]["phrasing"]
+            "current_tone": current_tone,
+            "next_tone": next_tone,
+            "when_end": min(when_end, num_when_end),
+            "phrasing": element["phrasing"] if tones is None else tones[index]["phrasing"]
         }
 
-        # Input tones, 0 = current, 1 = next, 2 = next next, etc
-        for i in range(8):
-            tone_index = index + i
-            tone_data = data if tones is None else tones
-            single_input[f"tone_{i}"] = END_TONE if tone_index >= len(tone_data) else tone_data[tone_index]["tone"]
-
-        # Add intelligible intervals
-        valid_intervals = [0] * num_pitch
-        interval_idx = f"{single_input['tone_0']}_{single_input['tone_1']}"
-
-        # Check unintelligible intervals
-        follow_tones = True
-        if index + 1 < len(data):
-            actual_interval = data[index + 1]["pitch"] - data[index]["pitch"]
-            if interval_idx in tones_to_intervals and actual_interval not in tones_to_intervals[interval_idx]:
-                follow_tones = False
-
-        # if the next tone is a rest, the only valid pitch is rest
-        if single_input["tone_1"] in (REST_TONE, LONG_REST_TONE, END_TONE, PAD_TONE):
-            valid_intervals[pitch_to_id["0"]] = 1
-
-        # if starting from a rest, or we know that the interval is unintelligible, any note is valid
-        elif interval_idx not in tones_to_intervals or not follow_tones:
-            valid_intervals = [1] * num_pitch
-            valid_intervals[pitch_to_id["0"]] = valid_intervals[pitch_to_id["1"]] = 0
-
-        # calculate a vector of valid pitches
-        else:
-            for interval in tones_to_intervals[interval_idx]:
-                new_pitch = pitch + interval
-                if str(new_pitch) in pitch_to_id:
-                    valid_intervals[pitch_to_id[str(new_pitch)]] = 1
-
         single_input = {k: [int(v == j) for j in range(param_shapes[k])] for k, v in single_input.items()}
-        single_input["valid_pitches"] = valid_intervals
+        single_input["valid_pitches"] = calculate_valid_pitches(current_tone, next_tone,
+                                                                pitch, next_pitch)
 
         bulk_append(onehot_vector_inputs, single_input)
 
     return onehot_vector_inputs
+
+
+def calculate_valid_pitches(current_tone, next_tone, current_pitch, next_pitch):
+    interval_idx = f"{current_tone}_{next_tone}"
+    valid_pitches = [0] * num_pitch
+
+    if next_tone in (REST_TONE, LONG_REST_TONE, END_TONE, PAD_TONE):
+        valid_pitches[pitch_to_id["0"]] = 1
+
+    elif interval_idx not in tones_to_intervals:
+        valid_pitches = [1] * num_pitch
+        valid_pitches[pitch_to_id["0"]] = valid_pitches[pitch_to_id["1"]] = 0
+
+    else:
+        for interval in tones_to_intervals[interval_idx]:
+            new_pitch = current_pitch + interval
+            if str(new_pitch) in pitch_to_id:
+                valid_pitches[pitch_to_id[str(new_pitch)]] = 1
+
+    return valid_pitches
 
 
 def process_output_data(data):
@@ -385,7 +381,7 @@ def generating_training_sequences(dataset_path=DATASET_PATH):
             stdout.flush()
             with open(os.path.join(path, filename)) as file:
                 data = json.load(file)
-                data = [{"tone": PAD_TONE, "pitch": 1, "duration": 0, "phrasing": 0}] * (SEQUENCE_LENGTH - 1) + data
+                data = [PAD_NOTE] * (SEQUENCE_LENGTH - 1) + data
 
                 no_of_inputs = len(data) - SEQUENCE_LENGTH
 
