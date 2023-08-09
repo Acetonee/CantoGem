@@ -100,9 +100,9 @@ def train():
     # train the model
     # Create a callback that saves the model's weights
     cp_callback = [keras.callbacks.ModelCheckpoint(filepath=SAVE_MODEL_PATH, verbose=0, save_weights_only=True),
-                   keras.callbacks.EarlyStopping(monitor="val_loss", patience=5, verbose=0)]
+                   keras.callbacks.EarlyStopping(monitor="val_loss", patience=5000, verbose=0)]
 
-    history = model.fit(list(inputs.values()), list(targets.values()), epochs=EPOCHS, batch_size=BATCH_SIZE,
+    history = model.fit(list(inputs.values()), list(targets.values()), epochs=5000, batch_size=BATCH_SIZE,
                         callbacks=[cp_callback], validation_data=(testing_inputs.values(), testing_targets.values()))
 
     # Save the model
