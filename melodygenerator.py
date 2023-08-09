@@ -15,14 +15,13 @@ from preprocess import process_input_data
 
 from preprocess import SEQUENCE_LENGTH, PAD_TONE, REST_TONE, LONG_REST_TONE
 
-from train import SAVE_MODEL_PATH, build_model, BUILD_PATH
+from train import build_model
 
 from harmoniser import harmonise, CHORD_DURATION
 from synthesizer import synthesize
 
+from paths import SAVE_MODEL_PATH, BUILD_PATH, MELODY_MIDI_SAVE_PATH, CHORD_MIDI_SAVE_PATH, MIDI_SAVE_PATH, PROGRESS_PATH
 CHORD_REFERENCE_DO = 36
-MIDI_SAVE_PATH = os.path.join(BUILD_PATH, "melody.mid")
-PROGRESS_PATH = os.path.join("serverside", "progressbar.txt")
 
 RANGE = 19  # 1.5 octaves
 
@@ -71,7 +70,7 @@ def save_song(melody, voice, format="midi", midi_path=MIDI_SAVE_PATH):
     stream.write(format, midi_path)
 
     try:
-        synthesize(midi_path)
+        synthesize()
     except:
         print("I hate windows")
         return
@@ -88,6 +87,7 @@ def save_melody(melody, step_duration=0.25):
         else:
             m21_event = m21.note.Note(note["pitch"], quarterLength=note["duration"] * step_duration)
         stream.append(m21_event)
+    stream.write("midi", MELODY_MIDI_SAVE_PATH)
     return stream
 
 
@@ -96,11 +96,14 @@ def save_chords(melody, stream):
     chords = [chord.construct_chord(CHORD_REFERENCE_DO) for chord in chord_progression]
     total_duration = sum([note["duration"] for note in melody])
 
+    new_stream = m21.stream.Stream()
     for i in range(0, total_duration, CHORD_DURATION):
         new_chord = m21.chord.Chord(chords[i // CHORD_DURATION], quarterLength=CHORD_DURATION // 4)
         new_chord.volume = m21.volume.Volume(velocity=60)
         stream.insert(i // 4, new_chord)
+        new_stream.append(new_chord)
 
+    new_stream.write("midi", CHORD_MIDI_SAVE_PATH)
     return stream
 
 

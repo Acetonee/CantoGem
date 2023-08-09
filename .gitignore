@@ -4,6 +4,8 @@ venv
 
 *.pyc
 
-melody.mid
+*.mid
+*.mp3
+*.wav
 
 serverside/progressbar.txt

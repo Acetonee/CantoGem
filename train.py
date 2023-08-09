@@ -6,12 +6,11 @@ from tensorflow import keras
 
 import matplotlib.pyplot as plt
 
+from paths import SAVE_MODEL_PATH, PLOT_PATH
+
 LEARNING_RATE = 0.001
 EPOCHS = 100
 BATCH_SIZE = 50
-BUILD_PATH = "build"
-SAVE_MODEL_PATH = os.path.join(BUILD_PATH, "model_weights.ckpt")
-PLOT_PATH = os.path.join(BUILD_PATH, "training_plot.png")
 
 
 class PitchLoss(keras.layers.Layer):

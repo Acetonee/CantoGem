@@ -1,17 +1,22 @@
 import os
+from pydub import AudioSegment
 
 from midi2audio import FluidSynth
-from train import BUILD_PATH
-
-MP3_PATH = os.path.join(BUILD_PATH, "song.mp3")
-CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
-SOUNDFONT_PATH = os.path.join(CURRENT_DIR, "soundfonts", "soundfonts.sf2")
+from paths import SOUNDFONT_MELODY_PATH, SOUNDFONT_CHORD_PATH, MELODY_MIDI_SAVE_PATH, CHORD_MIDI_SAVE_PATH, MELODY_WAV_PATH, CHORD_WAV_PATH, MP3_PATH
 
 
-def synthesize(midi_path, mp3_path=MP3_PATH, soundfont_path=SOUNDFONT_PATH):
-    fs = FluidSynth(soundfont_path)
-    fs.midi_to_audio(midi_path, mp3_path)
+
+def synthesize():
+    fs = FluidSynth(SOUNDFONT_MELODY_PATH)
+    fs.midi_to_audio(MELODY_MIDI_SAVE_PATH, MELODY_WAV_PATH)
+    fs = FluidSynth(SOUNDFONT_CHORD_PATH)
+    fs.midi_to_audio(CHORD_MIDI_SAVE_PATH, CHORD_WAV_PATH)
+    melody = AudioSegment.from_file(MELODY_WAV_PATH, format="wav")
+    chords = AudioSegment.from_file(CHORD_WAV_PATH, format="wav")
+    melody.overlay(chords).export(MP3_PATH)
+    os.remove(MELODY_WAV_PATH)
+    os.remove(CHORD_WAV_PATH)
 
 
 if __name__ == "__main__":
-    synthesize("build/melody.mid")
+    synthesize()
