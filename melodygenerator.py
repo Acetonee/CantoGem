@@ -20,7 +20,7 @@ from train import build_model
 from harmoniser import harmonise, CHORD_DURATION
 from synthesizer import synthesize
 
-from paths import SAVE_MODEL_PATH, BUILD_PATH, MELODY_MIDI_SAVE_PATH, CHORD_MIDI_SAVE_PATH, MIDI_SAVE_PATH, PROGRESS_PATH
+from paths import SAVE_MODEL_PATH, MELODY_MIDI_SAVE_PATH, CHORD_MIDI_SAVE_PATH, MIDI_SAVE_PATH, PROGRESS_PATH
 CHORD_REFERENCE_DO = 36
 
 RANGE = 19  # 1.5 octaves
@@ -62,36 +62,33 @@ def onehot_input_from_seed(data, tones):
 
 
 def save_song(melody, voice, format="midi", midi_path=MIDI_SAVE_PATH):
-
-    stream = save_melody(melody)
-    stream = save_chords(melody, stream)
-    stream = transpose(stream, voice)
+    transposition_factor = get_transposition_factor(melody, voice)
+    stream = save_melody(melody, transposition_factor)
+    stream = save_chords(melody, stream, transposition_factor)
+    stream = stream.transpose(transposition_factor)
 
     stream.write(format, midi_path)
 
-    try:
-        synthesize()
-    except:
-        print("I hate windows")
-        return
+    synthesize()
 
 
-def save_melody(melody, step_duration=0.25):
+def save_melody(melody, transposition_factor):
     stream = m21.stream.Stream()
     for note in melody:
         if note["duration"] == 0:
             continue
         # 0 is shorthand for a rest
         if note["pitch"] == 0:
-            m21_event = m21.note.Rest(quarterLength=note["duration"] * step_duration)
+            m21_event = m21.note.Rest(quarterLength=note["duration"] / 4)
         else:
-            m21_event = m21.note.Note(note["pitch"], quarterLength=note["duration"] * step_duration)
+            m21_event = m21.note.Note(note["pitch"], quarterLength=note["duration"] / 4)
         stream.append(m21_event)
-    stream.write("midi", MELODY_MIDI_SAVE_PATH)
+    stream.append(m21.note.Rest(quarterLength=2))
+    stream.transpose(transposition_factor).write("midi", MELODY_MIDI_SAVE_PATH)
     return stream
 
 
-def save_chords(melody, stream):
+def save_chords(melody, stream, transposition_factor):
     chord_progression = harmonise(melody)
     chords = [chord.construct_chord(CHORD_REFERENCE_DO) for chord in chord_progression]
     total_duration = sum([note["duration"] for note in melody])
@@ -103,17 +100,18 @@ def save_chords(melody, stream):
         stream.insert(i // 4, new_chord)
         new_stream.append(new_chord)
 
-    new_stream.write("midi", CHORD_MIDI_SAVE_PATH)
+    new_stream.transpose(transposition_factor).write("midi", CHORD_MIDI_SAVE_PATH)
     return stream
 
 
-def transpose(stream, voice):
+def get_transposition_factor(melody, voice):
     lowest_note = 1000
-    for event in stream.flat.notesAndRests:
-        if isinstance(event, m21.note.Note):
-            lowest_note = min(lowest_note, event.pitch.midi)
+    for event in melody:
+        # Reserve bottom 10 notes for other functions
+        if event["pitch"] > 10:
+            lowest_note = min(lowest_note, event["pitch"])
 
-    return stream.transpose(voice.value - lowest_note + random.choice([0, 1, -1]))
+    return voice.value - lowest_note + random.choice([0, 1, -1])
 
 
 class MelodyGenerator:
